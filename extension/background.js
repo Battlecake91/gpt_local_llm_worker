@@ -50,7 +50,7 @@ async function outbound(){
     if(automatic)await chrome.storage.local.set({[key]:{status:'ATTEMPTING',at:new Date().toISOString()}});
     const r=await chrome.tabs.sendMessage(item.tab_id,{type:'STAGE_MESSAGE',conversation_id:item.conversation_id,text:item.text,auto_send:automatic,claim_id:claimId}).catch(e=>({ok:false,error:String(e)}));
     if(automatic || r?.ok)await chrome.storage.local.set({[key]:{status:r?.status||'UNKNOWN',at:new Date().toISOString()}});
-    state.lastOutbound={id:item.id,status:r?.status||'ERROR',error:r?.error||null};broadcast();
+    state.lastOutbound={id:item.id,status:r?.status||'ERROR',error:r?.error||null,verification:r?.verification||null};broadcast();
     await api(`/outbound/${encodeURIComponent(item.id)}/ack`,{method:'POST',body:JSON.stringify({status:r?.status||'ERROR',error:r?.error||null,claim_id:claimId})});
   }
 }
