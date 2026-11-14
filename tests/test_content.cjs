@@ -13,7 +13,7 @@ function setup({conversation='abc',empty=true,sendEnabled=true}={}){
   const chrome={runtime:{sendMessage:async obj=>outbound.push(obj),onMessage:{addListener:fn=>listeners.message=fn}}};
   const MutationObserver=class{observe(){}};
   const loc={href:`https://chatgpt.com/c/${conversation}`};
-  const context={globalThis:null,BridgeCore:core,BridgeStopProbe:{StopProbe:class{reset(){}observe(){}snapshot(){return {controlStates:[]}}}},chrome,document:doc,location:loc,MutationObserver,window:{addEventListener(){}},queueMicrotask,crypto:globalThis.crypto,TextEncoder,Date,InputEvent:class{},Event:class{},setTimeout,clearTimeout};context.globalThis=context;
+  const context={globalThis:null,BridgeCore:core,BridgeExtractor:{inspectStructure:()=>null},BridgeStopProbe:{StopProbe:class{reset(){}observe(){}snapshot(){return {controlStates:[]}}}},chrome,document:doc,location:loc,MutationObserver,window:{addEventListener(){}},queueMicrotask,crypto:globalThis.crypto,TextEncoder,Date,InputEvent:class{},Event:class{},setTimeout,clearTimeout};context.globalThis=context;
   vm.runInNewContext(source,context);
   const deliver=msg=>new Promise(resolve=>{listeners.message(msg,{},result=>resolve(result))});
   return {deliver,editor,sent,loc,outbound};
@@ -24,3 +24,12 @@ test('auto-send with claim clicks once and reports only click',async()=>{const h
 test('wrong chat cannot stage',async()=>{const h=setup();const r=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'different',text:'test'});assert.equal(r.ok,false);assert.equal(h.sent.count,0)});
 test('nonempty composer is not overwritten',async()=>{const h=setup({empty:false});const r=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'test'});assert.equal(r.ok,false);assert.equal(h.editor.innerText,'Existing text')});
 test('send unavailable remains safe',async()=>{const h=setup({sendEnabled:false});const r=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'test',auto_send:true,claim_id:'approved'});assert.equal(r.ok,false);assert.equal(h.sent.count,0)});
+
+test('read-only preview never triggers capture, backend delivery or send',async()=>{
+  const h=setup();
+  const prior=h.outbound.length;
+  const reply=await h.deliver({type:'PREVIEW_CURRENT_REPLY'});
+  assert.equal(reply.ok,false);
+  assert.equal(h.outbound.length,prior);
+  assert.equal(h.sent.count,0);
+});
