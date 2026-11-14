@@ -50,7 +50,7 @@
       counts[tag] = (counts[tag] || 0) + 1;
       const children = nodes(node);
       const textNodes = children.filter(child => child.nodeType === 3);
-      const newlines = textNodes.reduce((total,child) => total + ((child.textContent || '').match(/\\n/g) || []).length, 0);
+      const newlines = textNodes.reduce((total,child) => total + ((child.textContent || '').match(/\n/g) || []).length, 0);
       const marker = node.getAttribute?.('data-markdown-text-style') ? 'markdown' :
         node.getAttribute?.('data-testid') ? 'testid' :
         node.getAttribute?.('role') ? 'role' : '';
