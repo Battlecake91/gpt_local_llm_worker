@@ -118,8 +118,18 @@
     (async()=>{
       if(!msg.conversation_id || core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_mismatch');
       if(document.querySelector(core.STOP))throw Error('generation_active');
-      const editor=document.querySelector('#prompt-textarea[contenteditable="true"], [data-testid="composer-rich-text-input"][contenteditable="true"], #prompt-textarea textarea, textarea#prompt-textarea');
+      // Modern ChatGPT uses a ProseMirror textbox inside data-chatgpt-composer.
+      // Bind only to the active composer: never type into unrelated editable UI.
+      const editor=document.querySelector(
+        'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"],'+
+        'form[data-chatgpt-composer] #prompt-textarea[contenteditable="true"],'+
+        '#prompt-textarea[contenteditable="true"],'+
+        '[data-testid="composer-rich-text-input"][contenteditable="true"],'+
+        'textarea#prompt-textarea'
+      );
       if(!editor)throw Error('editor_not_found');
+      if(typeof msg.text!=='string'||!msg.text.length||msg.text.length>100000)throw Error('invalid_stage_text');
+      if(editor.getAttribute?.('aria-disabled')==='true'||editor.closest?.('[inert]'))throw Error('editor_disabled');
       const old=(editor.isContentEditable?editor.innerText:editor.value)||'';
       if(old.trim())throw Error('composer_not_empty');
       editor.focus();
@@ -133,6 +143,9 @@
       }
       const actual=editor.isContentEditable?editor.innerText:editor.value;
       if(actual.replace(/\r\n/g,'\n')!==msg.text.replace(/\r\n/g,'\n'))throw Error('stage_verification_failed');
+      // Re-check routing and generation after insertion. STAGE_ONLY must never click.
+      if(core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_changed');
+      if(document.querySelector(core.STOP))throw Error('generation_active');
       if(!msg.auto_send)return {ok:true,status:'STAGED'};
       // Background must only set auto_send after a backend-issued, one-time claim.
       if(!msg.claim_id)throw Error('missing_claim');
