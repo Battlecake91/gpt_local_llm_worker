@@ -9,7 +9,7 @@ const approvalGrant=(item)=>({allowed:true,claim_id:'claim123',kind:'approved_ss
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/background.js'),'utf8');
 function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,initialStore={}}={}){
   const store=new Map(Object.entries(initialStore)),calls=[],sent=[];const listeners={},s={};
-  const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{}};
+  const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{},getURL:path=>'chrome-extension://testid/'+path};
   const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>({id,url:'https://chatgpt.com/c/abc'}),sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async()=>[]},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
   const fetch=async(url,opt={})=>{calls.push({url,opt});if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
   const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console,crypto:webcrypto,TextEncoder};
@@ -92,4 +92,40 @@ test('legacy allow-and-claim alone cannot authorize automatic sending',async()=>
   const h=harness({items:[item],grant:{allowed:true,claim_id:'claim123',kind:'approved_ssh_result'}});
   await h.event({type:'SET_TOKEN',token:'test'});
   assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
+
+test('web tab cannot list or approve SSH proposals',async()=>{
+  const h=harness();
+  await h.event({type:'SET_TOKEN',token:'test'});
+  const callsBefore=h.calls.length;
+  const untrusted={tab:{id:1},url:'https://chatgpt.com/c/abc'};
+  const result=await h.event({type:'DECIDE_SSH_PROPOSAL',decision:{action:'approve'}},untrusted);
+  assert.equal(result.ok,false);
+  assert.equal(result.error,'untrusted_review_sender');
+  assert.equal(h.calls.length,callsBefore);
+  const listing=await h.event({type:'LIST_SSH_PROPOSALS'},untrusted);
+  assert.equal(listing.ok,false);
+});
+test('trusted sidepanel cannot approve malformed or altered decision',async()=>{
+  const h=harness();
+  await h.event({type:'SET_TOKEN',token:'test'});
+  const sender={url:'chrome-extension://testid/panel.html'};
+  const baseline=h.calls.length;
+  const result=await h.event({type:'DECIDE_SSH_PROPOSAL',decision:{
+    action:'approve',request_id:'abc',command_sha256:'bad',tab_id:1,
+    conversation_id:'abc',confirmed:true
+  }},sender);
+  assert.equal(result.ok,false);
+  assert.equal(h.calls.length,baseline);
+});
+test('trusted sidepanel verifies original chat before posting review decision',async()=>{
+  const h=harness({tabConv:'other'});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  const baseline=h.calls.length;
+  const result=await h.event({type:'DECIDE_SSH_PROPOSAL',decision:{
+    action:'approve',request_id:'req-1',command_sha256:'a'.repeat(64),
+    tab_id:1,conversation_id:'abc',confirmed:true
+  }},{url:'chrome-extension://testid/panel.html'});
+  assert.equal(result.ok,false);
+  assert.equal(h.calls.length,baseline);
 });
