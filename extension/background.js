@@ -126,6 +126,11 @@ async function cycle(){
   catch(e){state.connected=false;state.error=String(e);}
   finally{cycleRunning=false;broadcast();}
 }
+// Only our own extension page may request user approval decisions.
+// A ChatGPT content script never receives approval authority.
+function trustedPanel(sender){
+  return !sender.tab && sender.url===chrome.runtime.getURL('panel.html');
+}
 chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   if(msg.type==='CAPTURE'){
     if(!state.captureEnabled || sender.tab?.id==null)return;
@@ -157,6 +162,37 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     chrome.tabs.query({url:'https://chatgpt.com/*'}).then(tabs=>
       Promise.all(tabs.map(t=>chrome.tabs.sendMessage(t.id,{type:'REQUEST_DIAGNOSTICS'}).catch(()=>{})))
     ).then(()=>reply({ok:true})).catch(e=>reply({ok:false,error:String(e)}));
+    return true;
+  }
+  if(msg.type==='LIST_SSH_PROPOSALS' || msg.type==='DECIDE_SSH_PROPOSAL'){
+    if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_review_sender'});return;}
+    (async()=>{
+      if(msg.type==='LIST_SSH_PROPOSALS'){
+        const result=await api('/ssh/proposals');
+        reply({ok:true,items:Array.isArray(result.items)?result.items:[]});
+        return;
+      }
+      const decision=msg.decision;
+      if(!decision || !['approve','reject'].includes(decision.action) ||
+         typeof decision.request_id!=='string' ||
+         !SAFE_ID.test(decision.request_id) ||
+         typeof decision.command_sha256!=='string' ||
+         !HEX_SHA.test(decision.command_sha256) ||
+         !Number.isInteger(decision.tab_id) ||
+         typeof decision.conversation_id!=='string' ||
+         decision.confirmed!==true)throw Error('invalid_review_decision');
+      const currentTab=await chrome.tabs.get(decision.tab_id).catch(()=>null);
+      if(!currentTab || new URL(currentTab.url).hostname!=='chatgpt.com')throw Error('review_tab_not_found');
+      const current=await chrome.tabs.sendMessage(decision.tab_id,{type:'GET_TAB_STATE'});
+      if(current?.conversation_id!==decision.conversation_id)throw Error('review_conversation_changed');
+      const result=await api('/ssh/proposals/'+encodeURIComponent(decision.request_id)+'/'+decision.action,{
+        method:'POST',body:JSON.stringify({
+          command_sha256:decision.command_sha256,confirmed:true,
+          conversation_id:decision.conversation_id,tab_id:decision.tab_id
+        })
+      });
+      reply({ok:true,status:result.status});
+    })().catch(e=>reply({ok:false,error:String(e.message||e)}));
     return true;
   }
   if(msg.type==='SET_TOKEN'){
