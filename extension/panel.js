@@ -18,3 +18,19 @@ byId('save').addEventListener('click',()=>{chrome.runtime.sendMessage({type:'SET
 byId('sync').addEventListener('click',()=>chrome.runtime.sendMessage({type:'SYNC_NOW'}));
 
 byId('diagnose').addEventListener('click',()=>chrome.runtime.sendMessage({type:'REFRESH_DIAGNOSTICS'}));
+
+byId('preview-current').addEventListener('click',async()=>{
+  const output=byId('preview-result');
+  output.textContent='Lese vorhandene Antwort ...';
+  try{
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    if(!tab?.id || !tab.url?.startsWith('https://chatgpt.com/c/')){
+      output.textContent='Kein aktiver ChatGPT-Konversationstab';return;
+    }
+    const result=await chrome.tabs.sendMessage(tab.id,{type:'PREVIEW_CURRENT_REPLY'});
+    if(!result?.ok){output.textContent='Fehler: '+(result?.error||'unbekannt');return;}
+    output.textContent='Zeichen: '+result.length+' | Zeilenumbrüche: '+result.newlineCount+
+      ' | Codeblöcke: '+result.codeBlocks+
+      (result.truncated?' | Vorschau abgeschnitten':'')+'\n\n'+result.text;
+  }catch(err){output.textContent='Fehler: '+String(err);}
+});
