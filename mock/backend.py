@@ -5,6 +5,10 @@ from typing import Literal
 import hashlib
 import re
 from threading import Lock
+from pathlib import Path
+from functools import lru_cache
+from worker.ssh_protocol import parse_ssh_request, InvalidSSHRequest
+from worker.approval_state import ApprovalStore, ApprovalStateError
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -63,15 +67,93 @@ class Database:
 
 db = Database()
 
+
 def require_token(authorization: str | None = Header(default=None)):
     if authorization != f"Bearer {TOKEN}":
         raise HTTPException(401, "Unauthorized")
+
+@lru_cache(maxsize=8)
+def approval_store(path: str) -> ApprovalStore:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    return ApprovalStore(path)
+
+
+def configured_approval_store() -> ApprovalStore | None:
+    """Approval preview is disabled unless explicitly configured for local fixtures."""
+    db_path = os.environ.get("BRIDGE_APPROVAL_DB")
+    if not db_path:
+        return None
+    return approval_store(str(Path(db_path).resolve()))
+
+
+def allowed_hosts() -> set[str]:
+    return {host.strip() for host in os.environ.get("BRIDGE_ALLOWED_HOSTS", "").split(",") if host.strip()}
+
+
+class ReviewDecision(BaseModel):
+    command_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed: Literal[True]
+    conversation_id: str
+    tab_id: int
+
+
+@app.get('/api/bridge/v1/ssh/proposals', dependencies=[Depends(require_token)] )
+def list_proposals():
+    store = configured_approval_store()
+    return {"items": [] if store is None else store.pending()}
+
+
+@app.post('/api/bridge/v1/ssh/proposals/{request_id}/approve', dependencies=[Depends(require_token)])
+def approve_proposal(request_id: str, decision: ReviewDecision):
+    store = configured_approval_store()
+    if store is None:
+        raise HTTPException(403, "Approval review not configured")
+    proposal = next((item for item in store.pending(100) if item["request_id"] == request_id), None)
+    if proposal is None or proposal["conversation_id"] != decision.conversation_id or proposal["tab_id"] != decision.tab_id:
+        raise HTTPException(409, "Origin or state changed")
+    if proposal["command_sha256"] != decision.command_sha256:
+        raise HTTPException(409, "Proposal digest changed")
+    try:
+        # This is a mock-only UI decision record, NOT permission to execute SSH or auto-send.
+        store.approve(request_id, command_sha256=decision.command_sha256,
+                      authenticated_operator="mock-sidepanel-confirmation")
+    except ApprovalStateError:
+        raise HTTPException(409, "Proposal already decided")
+    return {"status": "APPROVED_FOR_MOCK_REVIEW", "request_id": request_id}
+
+
+@app.post('/api/bridge/v1/ssh/proposals/{request_id}/reject', dependencies=[Depends(require_token)])
+def reject_proposal(request_id: str, decision: ReviewDecision):
+    store = configured_approval_store()
+    if store is None:
+        raise HTTPException(403, "Approval review not configured")
+    proposal = next((item for item in store.pending(100) if item["request_id"] == request_id), None)
+    if proposal is None or proposal["command_sha256"] != decision.command_sha256 or (
+        proposal["conversation_id"] != decision.conversation_id or proposal["tab_id"] != decision.tab_id
+    ):
+        raise HTTPException(409, "Proposal changed")
+    try:
+        store.reject(request_id)
+    except ApprovalStateError:
+        raise HTTPException(409, "Proposal already decided")
+    return {"status": "REJECTED", "request_id": request_id}
 
 @app.post('/api/bridge/v1/captures', dependencies=[Depends(require_token)])
 def capture(data: Capture):
     if data.message_id in db.captures:
         return {"message_id":data.message_id,"status":"duplicate"}
     db.captures[data.message_id] = data
+    store = configured_approval_store()
+    hosts = allowed_hosts()
+    if store is not None and hosts:
+        try:
+            proposal = parse_ssh_request(data.text, hosts)
+            store.propose(proposal, tab_id=data.tab_id, conversation_id=data.conversation_id)
+        except InvalidSSHRequest:
+            pass  # Not an eligible explicit SSH request.
+        except ApprovalStateError:
+            # Request-ID collisions are never silently approved.
+            raise HTTPException(409, "SSH proposal request-ID collision")
     return {"message_id":data.message_id,"status":"accepted"}
 
 @app.get('/api/bridge/v1/outbound', dependencies=[Depends(require_token)])
