@@ -150,3 +150,9 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Neue Unit-Fixtures: ProseMirror-Doppelumbrüche für Stage-Only, striktes Auto-Send trotz Claim, Verifikationskennzeichen. Keine Änderung am tatsächlichen Sendeklick.
 - Live-Retest: **zuerst vorhandenen Testtext aus ChatGPT-Eingabefeld löschen**, danach nur **einen** neuen Mock-Stage-Auftrag erzeugen und synchronisieren. Bereits mit `ERROR` quittierte IDs nicht erneut verwenden. Im Panel unter `Ausgehende Nachricht` `status`, `error` und `verification` prüfen.
 - Neuester Branch-Code committed, **noch nicht in Windows-Brave verifiziert**. Keine unbewiesene PASS-Zahl behaupten.
+
+## Live-Abnahme STAGE_ONLY mit ProseMirror-Verifikation (2026-11-14)
+- Benutzer meldet für `stage-f5cd0af3b2eb40b6a8c846dc7dd56bba`: `{"status":"STAGED","error":null,"verification":"VISUAL_LINES"}`.
+- Damit ist der vom Benutzer vorher sichtbar bestätigte Rückkanal nun auch **vom Protokoll quittiert**. Die eingebauten Abweichungstoleranzen gelten ausschließlich für `STAGE_ONLY`; der sendende Pfad bleibt mit `EXACT` abgesichert.
+- `Noch nicht geprüft` (read-only preview) und `keine` (`Letzte Übertragung`) nach Extension-Neuladen sind keine Fehlerindikatoren für das separate ausgehende Staging.
+- **Milestone abgeschlossen:** Beide Transportwege im Browser grundsätzlich live bestätigt, Bearer-Token unverändert. Weiterhin ausstehend: echter SSH-Autorisierungsworkflow, auto-send claim/receipt audit, strikte End-to-End-Texttreue, Restart-/Race-Tests und produktive Worker-Implementierung.
