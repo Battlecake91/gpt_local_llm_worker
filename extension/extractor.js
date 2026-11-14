@@ -18,7 +18,7 @@
       element.getAttribute?.('data-code-block')!==undefined;
     const body=modern ? element.children?.[1] || nodes(element).filter(n=>n.nodeType===1)[1] : null;
     const scope=body || element;
-    const code=scope.querySelector?.('pre,code') || scope;
+    const code=scope.querySelector?.('pre,code') || scope.querySelector?.('code') || scope;
     const raw=(code.textContent||'').replace(/\r\n?/g,'\n');
     const visual=code.innerText;
     return typeof visual==='string' && visual.includes('\n')
