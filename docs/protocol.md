@@ -33,3 +33,7 @@ Example execution result:
 ```
 
 Never interpret an assistant's claim of successful execution as an actual execution result. Only executor-generated results may be returned as such.
+
+
+## Browser transport (separate from SSH batch protocol)
+The versioned `/api/bridge/v1` transport carries completed assistant messages and outbound stage/send requests. It does not change the `ssh_batch` schema or authorize SSH commands. See [bridge transport protocol](bridge-protocol.md). The mock backend exposes a one-use claim fixture but does not implement actual human approval. A browser send-click acknowledgement must not be mistaken for ChatGPT server acceptance.
