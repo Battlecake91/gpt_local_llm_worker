@@ -133,6 +133,8 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   }
   if(msg.type==='SYNC_NOW'){cycle().then(()=>reply({ok:true}));return true;}
 });
+// Content scripts do not need access to persisted credentials or receipts.
+chrome.storage.local.setAccessLevel?.({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});
 chrome.tabs.onRemoved.addListener(id=>{delete state.tabs[id];broadcast();});
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
 Promise.all([credentials(),chrome.storage.local.get(['pendingCaptures','captureEnabled'])]).then(([,data])=>{
