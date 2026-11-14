@@ -65,3 +65,11 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Diagnose-Commit: `1d5acca315df06d988e55b5dc322e2d0e89d5b90`.
 - **Nächste Benutzerhandlung**: Git-Pull, Erweiterung und ChatGPT-Tab neu laden, eine neue Antwort erzeugen, den Bereich `selectorCounts` und `attributeHints` weitergeben. Erst danach den korrekten DOM-Adapter implementieren und reale Funktion erneut überprüfen.
 - Zusätzlicher Diagnose-Commit wurde nicht in einem realen Windows-Brave ausgeführt. Kein Erfolg der Antwort-Erkennung behauptet.
+
+## Modern-ChatGPT-Adapter (2026-11-14, Live-Fixture-Metadaten)
+- Bestätigte DOM-Merkmale: je 5 `[data-content-search-unit-key$=":assistant"]` und `...:user`, 5 `[data-markdown-text-style="assistant-message"]`, 5 `[data-turn-key]`; Legacy-Rollenmarker und `.markdown` jeweils 0.
+- `extension/bridge-core.js`: Legacy + moderne Assistant/User-Selektoren, Rollenauflösung aus `data-content-search-unit-key`, Extraktion des modernen Markdown-Containers, moderne stabile Nachricht-ID, zusätzliche explizite Stop-Aria-Labels.
+- `extension/content.js`: Baseline verwendet moderne Message-Identität, Abschluss prüft aktuellen letzten Assistant-Turn/ungeänderten Text und fehlenden Stop-Button erneut. Metadaten-Diagnose um Stop-Selektoren erweitert.
+- `tests/test_core.cjs`: moderne DOM-Fixture und Gate ohne zuvor beobachtetes Stop-Signal. In lokal reproduziertem Teststand: Node-Testlauf **22/22 PASS** (älterer Paketstand mit nachgestellten Core-Änderungen; **kein vollständiger Test des aktuellen GitHub-Branches**). Der echte Windows-Brave-Test bleibt offen.
+- **Wichtiger offener Punkt:** `stopEverSeen=false` in einer Diagnose nach abgeschlossener Antwort bestätigt nicht, ob die neue Stop-Schaltfläche während der Generierung einen erkennbaren Selektor besitzt. Ohne beobachtetes Stop-Signal wird weiterhin **nicht** automatisch als abgeschlossen klassifiziert.
+- Neuer Test: Repo pull, Erweiterung neu laden, Chat neu laden, eine neue Antwort generieren; im Panel `assistantCount`, `lastRole`, `lastAnswerLength`, `stopEverSeen` und Zustandsübergänge kontrollieren. Keine Echt-Auto-Sends.
