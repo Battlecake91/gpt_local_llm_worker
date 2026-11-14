@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const STATES = Object.freeze({ IDLE:'IDLE', GENERATING:'GENERATING', FINALIZING:'FINALIZING', COMPLETED:'COMPLETED', CANCELLED:'CANCELLED', ERROR:'ERROR' });
-  const STOP = '[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop streaming"],button[aria-label="Stop"],button[aria-label="Generierung stoppen"],button[aria-label="Antwortgenerierung stoppen"],button[aria-label="Antwort abbrechen"]';
+  const STOP = '[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop streaming"],button[aria-label="Stop"],button[aria-label="Generierung stoppen"],button[aria-label="Stoppen"],button[aria-label="Antwortgenerierung stoppen"],button[aria-label="Antwort abbrechen"]';
   // Legacy and modern ChatGPT use different turn metadata. Do not select nested message
   // decorations: each modern content-search unit represents one message.
   const ASSISTANT = '[data-message-author-role="assistant"],[data-content-search-unit-key$=":assistant"]';
