@@ -156,7 +156,7 @@
       // Re-check routing and generation after insertion. STAGE_ONLY must never click.
       if(core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_changed');
       if(document.querySelector(core.STOP))throw Error('generation_active');
-      if(!msg.auto_send)return {ok:true,status:'STAGED'};
+      if(!msg.auto_send)return {ok:true,status:'STAGED',verification:exact?'EXACT':'VISUAL_LINES'};
       // Background must only set auto_send after a backend-issued, one-time claim.
       if(!msg.claim_id)throw Error('missing_claim');
       if(core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_changed');
