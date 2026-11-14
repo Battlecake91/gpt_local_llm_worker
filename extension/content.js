@@ -3,6 +3,28 @@
   const core=globalThis.BridgeCore;
   let active=true, tabConversation=core.conversation(location.href), observer, route=location.href;
   let sawUserStop=false, baseline=new Set(), lastProcessed='';
+  let diagnosticsSignature='', stopEverSeen=false, scanCount=0;
+  function reportDiagnostics(stop,node,role){
+    // Only DOM metadata: never expose conversation or message text in diagnostics.
+    const candidates=[...document.querySelectorAll('button')].filter(b=>
+      /stop|abbrechen|anhalten|beenden/i.test(
+        [b.getAttribute('aria-label'),b.getAttribute('data-testid'),b.getAttribute('title'),b.textContent?.trim().slice(0,35)].filter(Boolean).join(' ')
+      )).slice(0,5).map(b=>({
+        testid:b.getAttribute('data-testid')||'',
+        aria:b.getAttribute('aria-label')||'',
+        title:b.getAttribute('title')||''
+      }));
+    const debug={
+      stopDetected:!!stop, stopEverSeen, assistantCount:assistantNodes().length,
+      lastRole:role||'none', lastAnswerLength:core.readable(node).length,
+      hasConversation:!!tabConversation, candidateButtons:candidates, scanCount
+    };
+    const signature=JSON.stringify({...debug,scanCount:0});
+    if(signature!==diagnosticsSignature){
+      diagnosticsSignature=signature;
+      status(lifecycle.state,{diagnostics:debug});
+    }
+  }
   const assistantNodes=()=>[...document.querySelectorAll(core.ASSISTANT)];
   const existingId=n=>n.getAttribute('data-message-id')||n.id||'';
   const makeBaseline=()=>{ baseline=new Set(assistantNodes().map(n=>`${existingId(n)}\u0000${core.readable(n)}`)); };
@@ -25,7 +47,12 @@
     if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();makeBaseline();}
     if(sawUserStop){ if(!document.querySelector(core.STOP))sawUserStop=false;return; }
     const node=core.lastAssistant(document);
-    lifecycle.observe({stop:!!document.querySelector(core.STOP),conv:tabConversation,node,text:core.readable(node),role:core.lastTurnRole(document)});
+    const stop=document.querySelector(core.STOP);
+    const role=core.lastTurnRole(document);
+    scanCount++;
+    if(stop)stopEverSeen=true;
+    reportDiagnostics(stop,node,role);
+    lifecycle.observe({stop:!!stop,conv:tabConversation,node,text:core.readable(node),role});
   }
   let scanPending=false;
   function queueScan(){if(scanPending)return;scanPending=true;queueMicrotask(()=>{scanPending=false;scan();});}
@@ -39,6 +66,7 @@
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(msg.type==='SET_CAPTURE'){active=!!msg.enabled;lifecycle.invalidate();makeBaseline();status(active?'IDLE':'DISABLED');reply({ok:true});return;}
     if(msg.type==='GET_TAB_STATE'){reply({ok:true,conversation_id:core.conversation(location.href),state:lifecycle.state});return;}
+    if(msg.type==='REQUEST_DIAGNOSTICS'){diagnosticsSignature='';scan();reply({ok:true});return;}
     if(msg.type!=='STAGE_MESSAGE')return;
     (async()=>{
       if(!msg.conversation_id || core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_mismatch');
