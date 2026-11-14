@@ -34,8 +34,17 @@ def _unpack(text: str) -> object:
         raise InvalidSSHRequest("ambiguous_json_blocks")
     if candidates:
         text = candidates[0]
+    def no_duplicates(pairs: list[tuple[str, object]]) -> dict:
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise InvalidSSHRequest("duplicate_json_key")
+            obj[key] = value
+        return obj
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=no_duplicates)
+    except InvalidSSHRequest:
+        raise
     except (ValueError, TypeError) as exc:
         raise InvalidSSHRequest("invalid_json") from exc
 
