@@ -47,6 +47,8 @@
       }
       if(!this.session || !this.session.sawStop || role!=='assistant')return;
       if(!node || !text.trim()){this.setState(STATES.ERROR);return;}
+      const changed = this.state !== STATES.FINALIZING || this.session.text !== text || this.session.node !== node;
+      if (!changed) return; // Unrelated DOM mutations must not postpone completion forever.
       this.session.node=node; this.session.text=text;
       this.setState(STATES.FINALIZING);
       if(this.timer!==null)this.clear(this.timer);
