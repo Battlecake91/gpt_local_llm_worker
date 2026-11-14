@@ -71,6 +71,19 @@ class ApprovalStateTests(unittest.TestCase):
         with self.assertRaisesRegex(ApprovalStateError, "request_id_collision"):
             self.db.propose(self.request, tab_id=7, conversation_id="other-chat")
 
+    def test_pending_review_contains_full_immutable_command_block(self):
+        proposals = self.db.pending()
+        self.assertEqual(len(proposals), 1)
+        item = proposals[0]
+        self.assertEqual(item["host_id"], "lab-nas")
+        self.assertEqual(item["working_directory"], "/tmp")
+        self.assertEqual(item["tab_id"], 7)
+        self.assertEqual(item["conversation_id"], "chat-abc")
+        self.assertEqual(item["command_sha256"], self.request.command_sha256)
+        self.assertEqual([c["timeout_seconds"] for c in item["commands"]], [15, 30])
+        self.db.reject("req-1")
+        self.assertEqual(self.db.pending(), [])
+
     def test_duplicate_proposal_is_idempotent(self):
         self.db.propose(self.request, tab_id=7, conversation_id="chat-abc")
         self.assertEqual(self.db.get("req-1")["status"], "PROPOSED")
