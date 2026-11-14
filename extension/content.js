@@ -101,6 +101,18 @@
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(msg.type==='SET_CAPTURE'){active=!!msg.enabled;lifecycle.invalidate();makeBaseline();status(active?'IDLE':'DISABLED');reply({ok:true});return;}
     if(msg.type==='GET_TAB_STATE'){reply({ok:true,conversation_id:core.conversation(location.href),state:lifecycle.state});return;}
+    if(msg.type==='PREVIEW_CURRENT_REPLY'){
+      const node=core.lastAssistant(document);
+      if(!tabConversation || !node || document.querySelector(core.STOP)){
+        reply({ok:false,error:'no_completed_reply_or_generation_active'});return;
+      }
+      const text=core.readable(node);
+      reply({ok:true,text:text.slice(0,16000),length:text.length,truncated:text.length>16000,
+        codeBlocks:(text.match(/^`{3,}/gm)||[]).length/2,
+        newlineCount:(text.match(/\n/g)||[]).length,
+        conversation_id:tabConversation});
+      return;
+    }
     if(msg.type==='REQUEST_DIAGNOSTICS'){structureTrace=globalThis.BridgeExtractor.inspectStructure(core.lastAssistant(document));diagnosticsSignature='';scan();reply({ok:true});return;}
     if(msg.type!=='STAGE_MESSAGE')return;
     (async()=>{
