@@ -1,10 +1,25 @@
 /* The extension transports data. The authenticated worker alone authorizes auto-send. */
 const BASE='http://127.0.0.1:8765/api/bridge/v1';
 const pending=new Map(), busy=new Set();
-let sessionToken=''; // Process memory only: never persist service credentials in extension storage.
-let state={connected:false,captureEnabled:true,tabs:{},lastCapture:null,lastTransfer:null,lastOutbound:null,error:null,pending:0};
+let sessionToken=''; // Cached after protected extension-local storage has been loaded.
+let credentialsReady=null;
+const TOKEN_KEY='workerBearerToken';
+async function credentials(){
+  if(!credentialsReady)credentialsReady=chrome.storage.local.get([TOKEN_KEY]).then(data=>{
+    sessionToken=typeof data[TOKEN_KEY]==='string'?data[TOKEN_KEY]:'';
+  });
+  await credentialsReady;
+  return sessionToken;
+}
+let state={connected:false,captureEnabled:true,tabs:{},lastCapture:null,lastTransfer:null,lastOutbound:null,error:null,pending:0,tokenSaved:false};
 const broadcast=()=>chrome.runtime.sendMessage({type:'STATUS',state}).catch(()=>{});
-async function config(){const {captureEnabled=true}=await chrome.storage.local.get(['captureEnabled']);state.captureEnabled=captureEnabled;return sessionToken;}
+async function config(){
+  const token=await credentials();
+  const {captureEnabled=true}=await chrome.storage.local.get(['captureEnabled']);
+  state.captureEnabled=captureEnabled;
+  state.tokenSaved=!!token;
+  return token;
+}
 async function api(path,options={}){
   const token=await config();if(!token)throw Error('worker_token_not_configured');
   const response=await fetch(BASE+path,{...options,headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json',...(options.headers||{})},signal:AbortSignal.timeout(7500)});
@@ -96,16 +111,34 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     return true;
   }
   if(msg.type==='SET_TOKEN'){
-    sessionToken=String(msg.token||'');cycle().then(()=>reply({ok:true}));return true;
+    (async()=>{
+      await credentials();
+      const token=String(msg.token||'');
+      if(!token || token.length>4096)throw Error('invalid_worker_token');
+      await chrome.storage.local.set({[TOKEN_KEY]:token});
+      sessionToken=token;state.tokenSaved=true;broadcast();
+      await cycle();
+      reply({ok:true});
+    })().catch(e=>reply({ok:false,error:String(e)}));
+    return true;
+  }
+  if(msg.type==='CLEAR_TOKEN'){
+    (async()=>{
+      await credentials();
+      await chrome.storage.local.remove(TOKEN_KEY);
+      sessionToken='';state.tokenSaved=false;state.connected=false;broadcast();
+      reply({ok:true});
+    })().catch(e=>reply({ok:false,error:String(e)}));
+    return true;
   }
   if(msg.type==='SYNC_NOW'){cycle().then(()=>reply({ok:true}));return true;}
 });
 chrome.tabs.onRemoved.addListener(id=>{delete state.tabs[id];broadcast();});
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
-chrome.storage.local.get(['pendingCaptures','captureEnabled']).then(data=>{
+Promise.all([credentials(),chrome.storage.local.get(['pendingCaptures','captureEnabled'])]).then(([,data])=>{
   state.captureEnabled=data.captureEnabled!==false;
   for(const item of data.pendingCaptures||[])pending.set(item.payload.message_id,item);
-  state.pending=pending.size;broadcast();cycle();
+  state.pending=pending.size;state.tokenSaved=!!sessionToken;broadcast();cycle();
 });
 // MV3 worker can be suspended. Alarm wakes it and drives bounded reconciliation.
 chrome.alarms?.create('bridge-sync',{periodInMinutes:0.5});
