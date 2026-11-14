@@ -169,3 +169,25 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Syntaxprüfung der direkt von GitHub geladenen Fassungen mit dem JavaScript-Parser: `background.js`, `panel.js`, `content.js`, `tests/test_background.cjs` **4/4 PASS**.
 - Zusätzlich wurde der aktuelle `background.js` in einer isolierten JavaScript-Simulation mit Chrome-Storage-, Tabs-, Network- und Alarm-Mocks ausgeführt: **4/4 PASS** für persistieren/kein Token im Panelstatus, löschen, Bearer-Header nach MV3-Neustart und Schutz vor wiederholtem Auto-Senden durch persistiertes `ATTEMPTING`-Receipt.
 - Repository-Unit-Tests wurden um 5 Fälle erweitert; die komplette Node-Test-Suite des GitHub-Branches konnte **nicht** ausgeführt werden, da der Checkout in der Tool-Umgebung wegen fehlender GitHub-DNS-Erreichbarkeit nicht möglich ist. Diese Tests und Brave-Livetest bleiben noch offen.
+
+## Sicherheitsphase: SSH-JSON, Approval-Store und gebundener Auto-Send (2026-11-14)
+
+**Ziel:** Backend-Freigabe muss vollständig an Nutzerentscheidung, unveränderlichen SSH-Befehlsblock, Originalchat und exakten Ergebnistext gebunden sein. Kein Live-SSH, keine automatische Nachricht gegen eine reale Sitzung.
+
+**Implementiert:**
+- `extension/background.js`: Automatisches Absenden nur für ein `approval`-Objekt mit `job_id`, `approval_id`, `host_id`, `command_sha256`, `result_sha256`; gegen vollständig gespiegelte einmalige Claim-Antwort und Ursprung `outbound_id`, `tab_id`, `conversation_id` prüfen. SHA-256 des konkreten UTF-8-Ergebnistexts browserseitig nachrechnen. Alte `allowed/claim_id`-Claims werden verweigert. Ungültiger Payload/Claim erhält terminale lokale `BLOCKED_INVALID_PAYLOAD`/`BLOCKED_INVALID_CLAIM`-Receipts; `ATTEMPTING` wird weiterhin vor DOM-Klick dauerhaft gespeichert. `STAGE_ONLY` und Bearer-Authentifizierung bleiben kompatibel.
+- `mock/backend.py`: Claim-Anfrage und Antwort an denselben Job-, Approval- und Result-Digest gebunden; im Mock durch `threading.Lock` atomar gegen gleichzeitige Claims. Der Mock erstellt **keine echten Benutzerfreigaben**.
+- `worker/ssh_protocol.py`: reiner Parser für das bereits in `docs/protocol.md` definierte `kind:"ssh_batch"` mit `target`, `working_directory`, vollständigen `commands` (IDs, Kommando, Timeout) und `description`. Keine Shell-Ausführung. Allowlist, Grenzen, eindeutige JSON-Schlüssel, keine freien Textbefehle. Kanonischer Digest umfasst gesamten sichtbaren Befehlsblock samt Ziel, CWD und Timings.
+- `worker/approval_state.py`: transaktionale SQLite-Ledger-Funktionen für `PROPOSED`, `APPROVED`, `REJECTED`, `RUNNING`, `UNKNOWN`; Approval-Digest und Ursprungstab/Chat unveränderlich, claim-once vor möglichem SSH-Start, `RUNNING` nach Neustart ohne automatische Wiederholung als `UNKNOWN`. SQLite-Verbindungen explizit geschlossen.
+- Regressionstests und Doku in `tests/test_background.cjs`, `tests/test_mock.py`, `tests/test_ssh_protocol.py`, `tests/test_approval_state.py`, `docs/bridge-protocol.md`, `docs/protocol.md`, `docs/security.md`, `README.md`.
+
+**Ausgeführte Tests:**
+- Python: `PYTHONWARNINGS=error python -m unittest discover -s tests -p 'test_*.py' -q` in isoliertem lokalen Prüfverzeichnis: **20/20 PASS** (8 SQLite-Tests, 8 SSH-Parser-Tests, 4 FastAPI-Mock-Tests). Die vier geprüften Python-Quell-/Testdateien wurden per `git hash-object` bytegenau gegen die entsprechenden GitHub-Blob-SHAs abgeglichen, ebenso die beiden Mock-Dateien.
+- JavaScript: Direkte V8-Ausführung des aus GitHub geladenen `extension/background.js` mit Chrome/FETCH/crypto-Mocks: **5/5 PASS** für gültigen gebundenen Claim, falsche Approval-ID, falschen Chat, fehlende Jobbindung und altes Claim-Format. Nach Receipt-Härtung erneut **5/5**: gültig genau einmal, falsche Freigabe/falscher Ursprung mit terminalem `BLOCKED_INVALID_CLAIM`, fehlende Bindung mit `BLOCKED_INVALID_PAYLOAD`, gespeichertes `ATTEMPTING` ohne Wiederholung. Keine echten Browserklicks.
+- Erweiterte Node-Regressionstests committed, vollständige `node --test tests/*.cjs` des aktuellen GitHub-Checkouts **hier noch nicht ausgeführt**. Kein realer SSH- oder Auto-Send-End-to-End-Test.
+
+**Offen vor einer produktiven Freigabe:**
+1. Vertrauenswürdiger operatorseitiger Approval-Dialog mit vollständiger Darstellung von Hostalias, konfiguriertem SSH-Benutzer, Arbeitsverzeichnis, allen Befehlen/Timeouts und Nebenwirkungen. `authenticated_operator` in der SQLite-Klasse ist eine **Vertragsannahme**, keine Authentifizierung; kein API-Endpunkt darf ungeprüft `approve()` aufrufen.
+2. SQLite-Ledger mit produktivem FastAPI-Worker und persistentem Result-/Audit-System verbinden; Allowlist, SSH-Hostkey-Pinning, Executor, Ausgabelimit und Redaction implementieren. Keine Credentials aus ChatGPT-Text.
+3. Nur nach separater Testfreigabe realen Auto-Send-DOM-Pfad prüfen; in Brave hat `STAGE_ONLY` bisher nur `VISUAL_LINES` erreicht, nicht das für Auto-Send nötige `EXACT`.
+4. Windows-Branch aktualisieren und `node --test tests/*.cjs` sowie `python -m unittest discover -s tests -p 'test_*.py' -v` auf dem vollständigen Checkout ausführen.
