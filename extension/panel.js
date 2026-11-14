@@ -65,7 +65,7 @@ function sshNode(tag,text){
   if(text!==undefined)node.textContent=String(text);
   return node;
 }
-async function refreshSSH(){
+async function refreshSSH(message=''){
   const status=byId('ssh-status'),container=byId('ssh-proposals');
   status.textContent='Lade Vorschläge ...';
   container.replaceChildren();
@@ -73,7 +73,7 @@ async function refreshSSH(){
     const response=await chrome.runtime.sendMessage({type:'LIST_SSH_PROPOSALS'});
     if(!response?.ok)throw Error(response?.error||'unbekannt');
     const items=Array.isArray(response.items)?response.items:[];
-    status.textContent=items.length+' offene SSH-Aufträge';
+    status.textContent=(message?message+' | ':'')+items.length+' offene SSH-Aufträge';
     for(const item of items){
       if(!item || !Array.isArray(item.commands) || !item.commands.length ||
          !/^[a-f0-9]{64}$/.test(item.command_sha256||''))continue;
@@ -105,8 +105,7 @@ async function refreshSSH(){
         try{
           const answer=await chrome.runtime.sendMessage({type:'DECIDE_SSH_PROPOSAL',decision});
           if(!answer?.ok)throw Error(answer?.error||'unbekannt');
-          status.textContent='Auftrag '+item.request_id+': '+answer.status;
-          await refreshSSH();
+          await refreshSSH('Auftrag '+item.request_id+': '+answer.status);
         }catch(err){
           status.textContent='Freigabe fehlgeschlagen: '+String(err);
           checkbox.disabled=false;reject.disabled=false;
