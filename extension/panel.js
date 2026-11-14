@@ -80,6 +80,7 @@ async function refreshSSH(){
       const section=sshNode('section');section.className='ssh-proposal';
       section.append(sshNode('h3','Auftrag '+item.request_id));
       section.append(sshNode('p','Host: '+item.host_id+' | Chat: '+item.conversation_id+' | Tab: '+item.tab_id));
+      section.append(sshNode('p','SSH-Benutzer und Hostkey: im Mock nicht konfiguriert (keine Ausführung)'));
       section.append(sshNode('p','Arbeitsverzeichnis: '+item.working_directory));
       section.append(sshNode('p','Beschreibung (unverifizierter Modelltext): '+item.description));
       section.append(sshNode('p','Befehlsblock SHA-256: '+item.command_sha256));
