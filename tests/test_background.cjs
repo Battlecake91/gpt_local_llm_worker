@@ -45,3 +45,19 @@ test('clear-token removes stored credential and prevents network use',async()=>{
   const status=await h.event({type:'GET_STATUS'});
   assert.equal(status.tokenSaved,false);
 });
+
+test('persisted ATTEMPTING receipt blocks auto-send replay after MV3 restart',async()=>{
+  const item={id:'restart-job',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output'};
+  const h=harness({items:[item],grant:{allowed:true,claim_id:'claim',kind:'approved_ssh_result'},
+    initialStore:{workerBearerToken:'persisted',receipt_restart_job:{status:'ATTEMPTING'}}});
+  await h.event({type:'SYNC_NOW'});
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/claim')).length,0);
+});
+test('concurrent sync requests cannot duplicate an auto-send',async()=>{
+  const h=harness({items:[{id:'one-time',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output'}],
+    grant:{allowed:true,claim_id:'claim',kind:'approved_ssh_result'}});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  await Promise.all([h.event({type:'SYNC_NOW'}),h.event({type:'SYNC_NOW'})]);
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,1);
+});
