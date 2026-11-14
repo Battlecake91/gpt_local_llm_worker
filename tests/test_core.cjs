@@ -71,3 +71,19 @@ test('modern assistant remains inert without observed stop lifecycle',()=>{
   t.advance(1000);
   assert.equal(out.length,0);
 });
+
+test('German Stoppen control from Windows Brave trace drives generation completion',()=>{
+  const {STOP}=require('../extension/bridge-core.js');
+  assert.ok(STOP.split(',').includes('button[aria-label="Stoppen"]'));
+  const {t,out,life}=setup();
+  const node=fixture('Codeblock\\nprint(123)\\nMehrzeilige Erklärung');
+  const foundStop=aria=>STOP.split(',').includes(`button[aria-label="${aria}"]`);
+  observe(life,foundStop('Stoppen'),'Noch im Aufbau',node);
+  assert.equal(life.state,STATES.GENERATING);
+  observe(life,false,'Codeblock\\nprint(123)\\nMehrzeilige Erklärung',node);
+  assert.equal(life.state,STATES.FINALIZING);
+  t.advance(100);
+  assert.equal(out.length,1);
+  assert.equal(life.state,STATES.COMPLETED);
+  assert.equal(out[0].text,'Codeblock\\nprint(123)\\nMehrzeilige Erklärung');
+});
