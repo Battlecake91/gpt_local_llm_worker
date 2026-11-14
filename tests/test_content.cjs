@@ -1,7 +1,7 @@
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm');
 const core=require('../extension/bridge-core.js');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/content.js'),'utf8');
-function setup({conversation='abc',empty=true,sendEnabled=true,modernOnly=false}={}){
+function setup({conversation='abc',empty=true,sendEnabled=true,modernOnly=false,paragraphBreaks=false}={}){
   const outbound=[],sent={count:0},listeners={};
   const editor={isContentEditable:true,innerText:empty?'':'Existing text',textContent:'',focus(){},dispatchEvent(){}};
   const send={disabled:!sendEnabled,click(){sent.count++}};
@@ -10,7 +10,7 @@ function setup({conversation='abc',empty=true,sendEnabled=true,modernOnly=false}
     else if(sel.includes('#prompt-textarea'))return editor;
     if(sel.includes('[data-testid="send-button"]'))return send;
     return null;
-  },querySelectorAll:()=>[],addEventListener(){},execCommand:(action,unused,text)=>{editor.innerText=text;return true}};
+  },querySelectorAll:()=>[],addEventListener(){},execCommand:(action,unused,text)=>{editor.innerText=paragraphBreaks?text.replace(/\n/g,'\n\n'):text;return true}};
   const chrome={runtime:{sendMessage:async obj=>outbound.push(obj),onMessage:{addListener:fn=>listeners.message=fn}}};
   const MutationObserver=class{observe(){}};
   const loc={href:`https://chatgpt.com/c/${conversation}`};
@@ -48,5 +48,19 @@ test('stage-only rejects blank text before editing',async()=>{
   const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'',auto_send:false});
   assert.equal(result.ok,false);
   assert.equal(h.editor.innerText,'');
+  assert.equal(h.sent.count,0);
+});
+
+test('STAGE_ONLY accepts Chromium ProseMirror paragraph-spacing differences without clicking send',async()=>{
+  const h=setup({modernOnly:true,paragraphBreaks:true});
+  const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'Erste Zeile\nZweite Zeile\nDritte Zeile',auto_send:false});
+  assert.equal(result.status,'STAGED');
+  assert.equal(h.sent.count,0);
+});
+test('auto-send rejects ProseMirror paragraph-spacing differences even with claim',async()=>{
+  const h=setup({modernOnly:true,paragraphBreaks:true});
+  const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'Erste\nZweite',auto_send:true,claim_id:'grant'});
+  assert.equal(result.ok,false);
+  assert.equal(result.error,'stage_verification_failed');
   assert.equal(h.sent.count,0);
 });
