@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Local Worker Bridge",
+  "version": "0.1.0",
+  "description": "Capture completed ChatGPT replies and stage authorized worker results.",
+  "permissions": ["storage", "tabs", "sidePanel", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*"],
+    "js": ["bridge-core.js", "content.js"],
+    "run_at": "document_idle"
+  }],
+  "side_panel": {"default_path": "panel.html"},
+  "action": {"default_title": "GPT Worker Bridge"}
+}
