@@ -203,3 +203,19 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
   `py -m pytest -q`
   Nur den letzten Befehl erneut ausführen genügt nach der Installation, denn die 53 JS-Tests sind bereits bestätigt.
 - Vollständiger Python-pytest-Lauf unter Windows **noch offen**. Keine echten SSH-Ausführungen oder Auto-Send-Aktionen wurden durchgeführt.
+
+## Windows-Tests vollständig grün; Mock-SSH-Freigabedialog (2026-11-14)
+
+**Vom Benutzer übermittelte Abnahme vor dieser Iteration:** `py -m pip install -e ".[test]"` erfolgreich; `py -m pytest -q` → **25 passed, 10 subtests passed**, 0.60 s. Die zuvor gemeldeten **53/53 Node-Tests** waren bereits bestanden. Python-Importfehler durch fehlendes `pytest` beseitigt.
+
+**Implementiert, noch ohne produktive SSH-Ausführung:**
+- `worker/approval_state.py` besitzt `pending()`, liefert unveränderliche vollständige Review-Daten (Hostalias, Ursprungschat/Tab, CWD, Beschreibung, Command-ID/Text/Timeout, SHA-256) aus SQLite.
+- `mock/backend.py` erkennt `kind:"ssh_batch"` bei eingehendem Capture nur bei explizit gesetzten `BRIDGE_ALLOWED_HOSTS` und `BRIDGE_APPROVAL_DB`. Unbekannte Hosts oder unstrukturierter Antworttext bleiben wirkungslos. Review-Routen `GET /api/bridge/v1/ssh/proposals` und `POST /api/bridge/v1/ssh/proposals/{request_id}/approve|reject` erfordern Bearer-Token und vergleichen Origin, Digest und Status. Ein `APPROVED_FOR_MOCK_REVIEW`-Eintrag **gibt keine SSH-Ausführung und keinen Browser-Auto-Send frei**. Speicherung vor Capture-ACK, Request-ID-Kollision → 409.
+- `extension/background.js` nimmt `LIST_SSH_PROPOSALS` und `DECIDE_SSH_PROPOSAL` ausschließlich von der eigenen `panel.html`-Extension-URL an (keine `sender.tab`), prüft zusätzlich Originalchat/Tab und nutzt weiterhin den gespeicherten Bearer-Token. Webseiten-/Content-Script-Aktionen werden abgewiesen.
+- `extension/panel.html`/`panel.js`: standardmäßig eingeklappter Abschnitt mit vollständigem Befehlsblock, untrusted Beschreibung, bestätigungspflichtiger Gesamtfreigabe-Checkbox und separatem Ablehnen. Inhalte werden ausschließlich über `textContent` eingefügt, nicht als HTML. Nicht konfigurierte reale SSH-Benutzer/Hostkeys werden ausdrücklich als fehlend angezeigt.
+- `scripts/windows-brave-mock.ps1 -ReviewHosts @('lab-nas')` aktiviert Review-Modus und legt lokale Mock-DB unter `%LOCALAPPDATA%\gpt-local-llm-worker\mock-review.sqlite3` ab. `scripts/windows-brave-review.ps1` erzeugt nur den synthetischen Vorschlag (uname -a, id), ohne SSH-Verbindung. PowerShell 5.1 unterstützt.
+- Neue Tests: `tests/test_review_api.py` (6 API-/Sicherheitsfälle), `tests/test_approval_state.py` (vollständige Pending-Daten), `tests/test_background.cjs` (4 negative/positive Panel-Origin-Fälle). `INSTALL.md` aktualisiert.
+
+**Ausgeführte gezielte Prüfungen:** V8-JavaScript-Parser `panel.js`, `background.js`, `test_background.cjs`: **3/3 PASS**. Direkte isolierte Hintergrunddienst-Simulation: vertrauenswürdiges Panel darf Mock-Entscheidung abschicken, nicht vertrauenswürdiger ChatGPT-Tab wird abgewiesen: **2/2 PASS**. Die vollständige Node-/pytest-Testsuite **nach diesen neuen Änderungen** und der neue Brave-Dialog müssen unter Windows noch abgenommen werden.
+
+**Wichtige Grenze:** Der Mock prüft nur, ob eine Aktion vom authentifizierten lokalen Extension-Transport stammt. Ein echter produktiver Operator-Login, eigener Freigabekanal, konfigurierter SSH-Benutzer, Hostkey-Pinning, Executor, Redaction und Auto-Send-Zustellkontrolle bleiben offen. Produktives Ausführen wird durch diesen Dialog nicht aktiviert.
