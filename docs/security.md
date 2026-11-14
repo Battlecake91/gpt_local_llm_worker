@@ -24,3 +24,7 @@ Write state before launching commands. On crash, ambiguous execution is UNKNOWN 
 
 ## Deployment
 Default dry-run. No production SSH connections or automatic sending enabled until separate integration tests and explicit operator enablement.
+
+
+## Implemented bridge safety boundary
+The MV3 extension only accesses `https://chatgpt.com/*` and `http://127.0.0.1/*`; API requests use a session-only Bearer token. Auto-send requires a one-use backend claim identifying an approved SSH result, with tab and conversation rechecked. A receipt is persisted before an attempted click to avoid blind retries after ambiguous failure. The mock adapter does **not** implement a real approval digest check, output redaction or durable audit log. Never expose it outside loopback, use it for real SSH approvals, or enable live auto-send without separate operator authorization. Its stage fixture endpoint is disabled unless `BRIDGE_MOCK_FIXTURES=1`. See [bridge protocol](bridge-protocol.md).
