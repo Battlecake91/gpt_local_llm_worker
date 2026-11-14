@@ -69,7 +69,11 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     submitCapture(msg.payload,sender.tab.id).catch(e=>{state.error=String(e);broadcast();});return;
   }
   if(msg.type==='OBSERVED_STATE'){
-    if(sender.tab?.id!=null)state.tabs[sender.tab.id]={state:msg.state,conversation_id:msg.conversation_id};
+    if(sender.tab?.id!=null)state.tabs[sender.tab.id]={
+      ...state.tabs[sender.tab.id],
+      state:msg.state,conversation_id:msg.conversation_id,
+      ...(msg.diagnostics?{diagnostics:msg.diagnostics}:{})
+    };
     if(msg.error)state.error=msg.error;broadcast();return;
   }
   if(msg.type==='GET_STATUS'){reply(state);return;}
@@ -78,6 +82,12 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     chrome.storage.local.set({captureEnabled:state.captureEnabled});
     chrome.tabs.query({url:'https://chatgpt.com/*'}).then(tabs=>Promise.all(tabs.map(t=>chrome.tabs.sendMessage(t.id,{type:'SET_CAPTURE',enabled:state.captureEnabled}).catch(()=>{}))));
     broadcast();reply({ok:true});return;
+  }
+  if(msg.type==='REFRESH_DIAGNOSTICS'){
+    chrome.tabs.query({url:'https://chatgpt.com/*'}).then(tabs=>
+      Promise.all(tabs.map(t=>chrome.tabs.sendMessage(t.id,{type:'REQUEST_DIAGNOSTICS'}).catch(()=>{})))
+    ).then(()=>reply({ok:true})).catch(e=>reply({ok:false,error:String(e)}));
+    return true;
   }
   if(msg.type==='SET_TOKEN'){
     sessionToken=String(msg.token||'');cycle().then(()=>reply({ok:true}));return true;
