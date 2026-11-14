@@ -14,10 +14,33 @@
         aria:b.getAttribute('aria-label')||'',
         title:b.getAttribute('title')||''
       }));
+    const selectors={
+      legacyAssistant:'[data-message-author-role="assistant"]',
+      legacyTurn:'[data-testid^="conversation-turn-"]',
+      modernTurn:'[data-turn-key]',
+      modernAssistant:'[data-content-search-unit-key$=":assistant"]',
+      modernAssistantAlt:'[data-chatgpt-search-unit-key$=":assistant"]',
+      modernUser:'[data-content-search-unit-key$=":user"]',
+      appShell:'[data-app-shell-main-content-layout]',
+      markdown:'.markdown',
+      assistantMarkdown:'[data-markdown-text-style="assistant-message"]',
+      userBubble:'[data-user-message-bubble="true"]',
+      composer:'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]'
+    };
+    const selectorCounts=Object.fromEntries(Object.entries(selectors).map(([key,selector])=>[
+      key,document.querySelectorAll(selector).length
+    ]));
+    const main=document.querySelector('main');
+    const attributeHints=[...new Set(
+      [...(main?.querySelectorAll('[data-turn-key],[data-content-search-unit-key],[data-chatgpt-search-unit-key],[data-thread-find-target],[data-test-id]')||[])].slice(-80)
+        .flatMap(el=>[...el.attributes].map(attr=>attr.name))
+        .filter(name=>/^(data-(turn|content-search|chatgpt-search|thread|test|message|app-shell))/.test(name))
+    )].slice(0,24);
     const debug={
       stopDetected:!!stop, stopEverSeen, assistantCount:assistantNodes().length,
       lastRole:role||'none', lastAnswerLength:core.readable(node).length,
-      hasConversation:!!tabConversation, candidateButtons:candidates, scanCount
+      hasConversation:!!tabConversation, candidateButtons:candidates, scanCount,
+      selectorCounts, attributeHints
     };
     const signature=JSON.stringify({...debug,scanCount:0});
     if(signature!==diagnosticsSignature){
