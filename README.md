@@ -30,3 +30,7 @@ python -m pytest -q
 Some legacy tests in `tests/test_contracts.py` are `pytest` functions with a `tmp_path` fixture; `unittest discover -p 'test_*.py'` is **not** the full Python test runner and fails to import that module if `pytest` is absent. Use `pytest` to collect both the legacy test functions and the newer `unittest.TestCase` suites.
 
 See [installation and mock smoke test](INSTALL.md), [bridge API contract](docs/bridge-protocol.md), and [live-test status](docs/work-in-progress/brave-chat-bridge.md). Brave has been tested live for completed-reply capture and STAGE_ONLY text insertion. Real SSH execution and auto-send have **not** been authorized or tested. Auto-send now rejects claims without a matching immutable SSH job/command/result/origin binding; the mock cannot grant genuine human approval.
+
+## SSH-Review im Brave-Panel (nur Mock)
+
+Das Seitenpanel enthält inzwischen einen eingeklappten Bereich für vollständige SSH-Auftragsvorschläge. Ein aktivierter Mock-Worker kann streng validierte `kind:"ssh_batch"`-Antworten mit konfigurierter Host-Allowlist in SQLite als `PROPOSED` speichern. Bestätigung und Ablehnung erfolgen nur per Panel-Aktion und werden vom Backend anhand Origin und Approval-Digest geprüft. **Dies ist keine produktive SSH-Freigabe:** Weder Executor noch automatische ChatGPT-Übertragung werden durch `APPROVED_FOR_MOCK_REVIEW` aktiviert. Anleitung: [INSTALL.md](INSTALL.md#mock-ssh-aufträge-im-seitenpanel-prüfen-ohne-ausführung).
