@@ -25,6 +25,8 @@
       markdown:'.markdown',
       assistantMarkdown:'[data-markdown-text-style="assistant-message"]',
       userBubble:'[data-user-message-bubble="true"]',
+      stopByTestId:'[data-testid="stop-button"]',
+      stopByLabel:'button[aria-label*="Stop"],button[aria-label*="stop"],button[aria-label*="Abbrechen"]',
       composer:'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]'
     };
     const selectorCounts=Object.fromEntries(Object.entries(selectors).map(([key,selector])=>[
@@ -49,13 +51,19 @@
     }
   }
   const assistantNodes=()=>[...document.querySelectorAll(core.ASSISTANT)];
-  const existingId=n=>n.getAttribute('data-message-id')||n.id||'';
+  const existingId=n=>n?.getAttribute('data-message-id')||n?.getAttribute('data-content-search-unit-key')||n?.id||'';
   const makeBaseline=()=>{ baseline=new Set(assistantNodes().map(n=>`${existingId(n)}\u0000${core.readable(n)}`)); };
   const digest=async raw=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)))].map(x=>x.toString(16).padStart(2,'0')).join('');
   const status=(state,extra={})=>chrome.runtime.sendMessage({type:'OBSERVED_STATE',state,conversation_id:tabConversation,...extra}).catch(()=>{});
   const lifecycle=new core.Lifecycle({onState:state=>status(state),onCompleted:async ({conv,node,text})=>{
     if(!active || conv!==tabConversation || core.conversation(location.href)!==conv)return;
-    const identity=core.messageIdentity(node,text,conv);
+    // The UI may still be streaming or may have replaced the final turn during
+    // stabilization. Fail closed instead of shipping a partial or stale answer.
+    const current=core.lastAssistant(document);
+    if(document.querySelector(core.STOP) || !current ||
+       core.lastTurnRole(document)!=='assistant' ||
+       existingId(current)!==existingId(node) || core.readable(current)!==text)return;
+    const identity=core.messageIdentity(current,text,conv);
     if(lastProcessed===identity || baseline.has(`${existingId(node)}\u0000${text}`))return;
     lastProcessed=identity;
     const id=await digest(identity);
