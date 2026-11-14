@@ -24,6 +24,8 @@
   }
   function readable(node) {
     if (!node) return '';
+    const structured = root.BridgeExtractor?.extract(node);
+    if (structured) return structured;
     const body = node.querySelector('[data-markdown-text-style="assistant-message"],.markdown,[data-message-text]') || node;
     // innerText preserves rendered line breaks and fenced/preformatted code in Chromium.
     return (body.innerText ?? body.textContent ?? '').replace(/\r\n/g, '\n');
