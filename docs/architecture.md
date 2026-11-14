@@ -49,3 +49,7 @@ A browser UI is not a stable API. Selectors and completion heuristics must be co
 - `extension/background.js`: before an auto-send attempt, an authenticated one-use claim must match immutable job ID, human-approval ID, host ID, complete command digest, browser-computed result digest, outbound ID and origin. Invalid bindings become terminal local blocked receipts. Existing STAGE_ONLY operation is unchanged.
 - `mock/backend.py`: still an in-memory loopback fixture, but requires claim bindings and locks one-time claim consumption. It cannot create genuine human approval through public endpoints.
 - The actual SSH executor, credentials/host-key configuration, operator approval UI, production FastAPI/SQLite integration, output redaction and real auto-send test are **not yet implemented**. Do not conflate successful contract tests with authorization to execute commands.
+
+### Isolierter UI-Freigabeschritt
+
+Das Brave-Seitenpanel besitzt jetzt eine ausdrücklich als Mock bezeichnete SSH-Review-Ansicht. `GET /api/bridge/v1/ssh/proposals` zeigt offene, validierte Vorschläge einschließlich unveränderlichem Digest und vollständig geordnetem Block. `approve/reject` wird nur nach einer separaten Benutzeraktion in der vertrauenswürdigen Extension-Seite weitergeleitet; die Mock-API fordert Bearer-Token und prüft Ursprung und Digest erneut. Ohne konfigurierte `BRIDGE_ALLOWED_HOSTS` und `BRIDGE_APPROVAL_DB` ist diese Review-Funktion inaktiv. Ein bestätigter Vorschlag aktiviert weder Executor noch Auto-Send.
