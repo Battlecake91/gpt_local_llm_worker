@@ -4,6 +4,7 @@
   let active=true, tabConversation=core.conversation(location.href), observer, route=location.href;
   let sawUserStop=false, baseline=new Set(), lastProcessed='';
   let diagnosticsSignature='', stopEverSeen=false, scanCount=0;
+  let structureTrace=null;
   const stopProbe=new globalThis.BridgeStopProbe.StopProbe();
   function reportDiagnostics(stop,node,role){
     // Only DOM metadata: never expose conversation or message text in diagnostics.
@@ -43,7 +44,8 @@
       stopDetected:!!stop, stopEverSeen, assistantCount:assistantNodes().length,
       lastRole:role||'none', lastAnswerLength:core.readable(node).length,
       hasConversation:!!tabConversation, candidateButtons:candidates, scanCount,
-      selectorCounts, attributeHints, stopProbe:stopProbe.snapshot()
+      selectorCounts, attributeHints, stopProbe:stopProbe.snapshot(),
+      ...(structureTrace?{structureTrace}:{})
     };
     const signature=JSON.stringify({...debug,scanCount:0});
     if(signature!==diagnosticsSignature){
@@ -76,7 +78,7 @@
   },true);
   function scan(){
     if(!active)return;
-    if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();stopProbe.reset();makeBaseline();}
+    if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();stopProbe.reset();structureTrace=null;makeBaseline();}
     if(sawUserStop){ if(!document.querySelector(core.STOP))sawUserStop=false;return; }
     const node=core.lastAssistant(document);
     const stop=document.querySelector(core.STOP);
@@ -99,7 +101,7 @@
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(msg.type==='SET_CAPTURE'){active=!!msg.enabled;lifecycle.invalidate();makeBaseline();status(active?'IDLE':'DISABLED');reply({ok:true});return;}
     if(msg.type==='GET_TAB_STATE'){reply({ok:true,conversation_id:core.conversation(location.href),state:lifecycle.state});return;}
-    if(msg.type==='REQUEST_DIAGNOSTICS'){diagnosticsSignature='';scan();reply({ok:true});return;}
+    if(msg.type==='REQUEST_DIAGNOSTICS'){structureTrace=globalThis.BridgeExtractor.inspectStructure(core.lastAssistant(document));diagnosticsSignature='';scan();reply({ok:true});return;}
     if(msg.type!=='STAGE_MESSAGE')return;
     (async()=>{
       if(!msg.conversation_id || core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_mismatch');
