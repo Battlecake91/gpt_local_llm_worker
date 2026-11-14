@@ -118,3 +118,11 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Lokale Testkopie mit dem relevanten Fix und aktualisiertem Regressionstest: `node --test tests/*.cjs` **31/31 PASS**, `node --check extension/extractor.js` PASS. Vollständiger GitHub-Branch- und Windows-Brave-Livetest stehen aus.
 - Sicherheit unverändert: Token/Bearer-Authentifizierung, Backend-Claims und Auto-Send-Gate bleiben aktiv.
 - Nächste Abnahme: `git pull --ff-only`, Erweiterung und Chat-Tab neu laden, neue Antwort erzeugen. Kein weiterer Countdown notwendig: beliebiger neuer Codeblock genügt. Bestehende `Letzte Antwort` wird beim Reload nicht nachträglich umgeschrieben.
+
+## Read-only Wiederholungsprüfung ohne erneute Generierung, 2026-11-14
+- Der zuletzt gelieferte `structureTrace` zeigt erneut denselben echten Assistenten-Codeblock (`data-code-block`, zwei Unter-DIVs) und die bereits erkannte Stop-Schaltfläche (`stopEverSeen=true`). Die Daten allein enthalten **keinen Vergleich der extrahierten Nutzlast** nach dem jüngsten Parser-Fix.
+- Neues Feature: Seitenpanel-Button **Vorhandene Antwort lokal prüfen**. Das Panel fragt ausschließlich beim aktiven ChatGPT-Konversationstab über `PREVIEW_CURRENT_REPLY` die aktuell vorhandene letzte Antwort ab. Es zeigt höchstens 16.000 Zeichen, tatsächliche Länge, Anzahl Zeilenumbrüche und Markdown-Fences. Kein `CAPTURE`, kein POST an den Worker, keine Eingabe in den Composer, kein Senden, keine Änderung des beobachteten Generation-Lifecycle.
+- `tests/test_content.cjs`: Negativtest, dass die read-only Anfrage ohne Assistentenantwort weder Capture noch Sendung auslöst.
+- Isolierter Offline-Test mit identischer Preview-Implementierung im lokalen Testverzeichnis: `node --check extension/content.js` PASS; `node --test tests/*.cjs` **32/32 PASS**. Vollständiger erneuter Windows-Brave-Test und GitHub-Checkout-Gesamttest noch offen.
+- Nach `git pull --ff-only`, Extension-Reload, ChatGPT-Tab-Reload, im bestehenden Chat **Vorhandene Antwort lokal prüfen** anklicken und nur den neuen Preview-Block vergleichen. Alte `Letzte Antwort` bleibt bewusst historische Capture-Vorschau; keine Neubewertung oder Neuübertragung bereits gesendeter Captures.
+- Bearer-Authentifizierung ausdrücklich beibehalten und nicht verändert.
