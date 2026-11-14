@@ -35,3 +35,9 @@ A browser UI is not a stable API. Selectors and completion heuristics must be co
 3. Ollama adapter and reproducible model benchmark.
 4. SSH mock executor and approval gates.
 5. End-to-end integration, explicit opt-in live testing.
+
+
+## Implemented bridge slice (feature/brave-chat-bridge)
+`extension/bridge-core.js` implements IDLE / GENERATING / FINALIZING / COMPLETED / CANCELLED / ERROR and waits 650 ms after the Stop button disappears. The content script observes DOM changes, extracts rendered multiline text, and establishes a baseline so pre-existing messages are not imported. The background service worker queues captures, authenticates on loopback and routes outbound staging to the originating tab and chat. The side panel currently shows connection, generation state, last capture, transfer, outbound status, queue and errors; full approval controls belong to a later worker integration.
+
+`mock/backend.py` is an in-memory fixture only, not the future durable SQLite service. Browser-side `SUBMIT_CLICKED` is distinct from server-confirmed delivery. See [bridge contract](bridge-protocol.md). A real Brave smoke test remains mandatory.
