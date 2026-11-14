@@ -18,3 +18,27 @@ test('mutation storms do not duplicate completion',()=>{const {t,out,life}=setup
 test('last user message prevents false finalize',()=>{const {t,out,life}=setup();observe(life,true);observe(life,false,'ignored',fixture(),'user');t.advance(500);assert.equal(out.length,0)});
 test('code and multiline extraction keeps newlines',()=>{assert.equal(readable(fixture()),'Line one\n  code();\nLine three')});
 test('conversation identification refuses wrong or temporary chats',()=>{assert.equal(conversation('https://chatgpt.com/c/abc-123'),'abc-123');assert.equal(conversation('https://chatgpt.com/'),null);});
+
+test('unrelated DOM mutations do not postpone an unchanged final answer',()=>{
+  const {t,out,life}=setup();
+  const node=fixture('Stable final answer');
+  observe(life,true,'Stable final answer',node);
+  observe(life,false,'Stable final answer',node);
+  for(let i=0;i<20;i++){t.advance(4);observe(life,false,'Stable final answer',node);}
+  t.advance(20);
+  assert.equal(out.length,1);
+  assert.equal(out[0].text,'Stable final answer');
+});
+test('changed answer text restarts finalization timer',()=>{
+  const {t,out,life}=setup();
+  const node=fixture('Changed final answer');
+  observe(life,true,'Draft answer',node);
+  observe(life,false,'Draft answer',node);
+  t.advance(80);
+  observe(life,false,'Changed final answer',node);
+  t.advance(20);
+  assert.equal(out.length,0);
+  t.advance(80);
+  assert.equal(out.length,1);
+  assert.equal(out[0].text,'Changed final answer');
+});
