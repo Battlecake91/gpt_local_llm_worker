@@ -42,3 +42,32 @@ test('changed answer text restarts finalization timer',()=>{
   assert.equal(out.length,1);
   assert.equal(out[0].text,'Changed final answer');
 });
+
+test('modern content-search turn markers select final assistant and role in DOM order',()=>{
+  const {ASSISTANT,USER,lastAssistant,lastTurnRole,roleOf,readable,messageIdentity}=require('../extension/bridge-core.js');
+  const turn=(key,rendered)=>({
+    id:'',getAttribute:name=>name==='data-content-search-unit-key'?key:null,
+    querySelector:selector=>selector.includes('data-markdown-text-style')?{innerText:rendered}:null,
+    textContent:rendered
+  });
+  const user=turn('conversation:turn-4:user','Frage');
+  const answer=turn('conversation:turn-5:assistant','Erste Zeile\n  print(123)\nLetzte Zeile');
+  const doc={querySelectorAll:selector=>{
+    if(selector===ASSISTANT)return [answer];
+    if(selector===`${ASSISTANT},${USER}`)return [user,answer];
+    return [];
+  }};
+  assert.equal(roleOf(user),'user');
+  assert.equal(roleOf(answer),'assistant');
+  assert.equal(lastAssistant(doc),answer);
+  assert.equal(lastTurnRole(doc),'assistant');
+  assert.equal(readable(answer),'Erste Zeile\n  print(123)\nLetzte Zeile');
+  assert.match(messageIdentity(answer,readable(answer),'abc'),/turn-5:assistant/);
+});
+test('modern assistant remains inert without observed stop lifecycle',()=>{
+  const {t,out,life}=setup();
+  const node=fixture('Legacy and modern both require observed stop');
+  observe(life,false,'Modern reply',node);
+  t.advance(1000);
+  assert.equal(out.length,0);
+});
