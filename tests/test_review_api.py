@@ -111,7 +111,6 @@ class ReviewAPITests(unittest.TestCase):
         self.assertEqual(self.pending().json()["items"][0]["commands"][0]["command"], "uname -a")
 
     def test_review_disabled_by_default(self):
-        self.config.stop()
         with patch.dict(os.environ, {"BRIDGE_APPROVAL_DB": "", "BRIDGE_ALLOWED_HOSTS": ""}):
             self.assertEqual(self.pending().json()["items"], [])
             self.assertEqual(self.capture(ssh_text()).status_code, 200)
