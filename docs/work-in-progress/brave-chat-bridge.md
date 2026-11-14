@@ -80,3 +80,11 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Keine Änderung an automatischen Sende- oder Freigaberegeln. Insbesondere wird fehlendes Stop-Signal nicht als Antwortabschluss interpretiert.
 - Neu: `tests/test_stop_probe.cjs` mit 3 Fixture-Tests. Die 3 neuen Tests wurden am 14.11.2026 in einem isolierten lokalen Node-22-Testverzeichnis ausgeführt: **3/3 PASS**, `node --check extension/stop-probe.js` PASS. Ein vollständiger aktualisierter GitHub-Checkout oder erneuter realer Brave-Test war hier nicht verfügbar.
 - Benutzeraktion für erneuten Live-Test: Feature-Branch pullen, Erweiterung und Chat-Tab neu laden, eine neue längere Antwort generieren, danach `DOM neu prüfen` und aus dem Panel `stopProbe` sowie `stopEverSeen` übermitteln.
+
+## Stop-Button durch Windows-Mitschnitt identifiziert
+- Benutzer lieferte die `stopProbe.controlStates` mit 11 Zuständen. **Zustand 9/10** enthält das Composer-`button` mit `aria="Stoppen"`; Zustand 11 enthält wieder `Sprachchat starten`. Die aktiven Stop-/Sende-Buttons haben keine `data-testid`-Kennung.
+- Root Cause: `core.STOP` enthielt `Stop generating` und `Generierung stoppen`, aber nicht das tatsächlich gemessene, lokalisierte `button[aria-label="Stoppen"]`.
+- Änderung: Selektor um exakt diese nachgewiesene Variante erweitert (`2b3e575da6b8d52345efa97f4ae27bdb0045d64e`). Bestehende Click-Cancel-, Generating- und Finalizing-Logik nutzt denselben Selektor.
+- Regressionstest für die spezifische Beschriftung, Start, Stabilisierung und vollständigen Abschluss hinzugefügt (`041a4899c714a1b7bc86b4edd936efadae3fa2d2`).
+- Testausführung: In einem vorhandenen **älteren lokalen Testverzeichnis** mit angewendetem Stop-Selektor und gezielter Regression `node --test tests/*.cjs`: **24/24 PASS**; `node --check extension/bridge-core.js`: PASS. Der gesamte aktuelle GitHub-Branch konnte in dieser Umgebung nicht geklont und getestet werden (keine DNS-Erreichbarkeit von github.com). Die Regression im Repository ist inhaltlich gleichwertig, der vollständige neue Branch-Test aber noch offen.
+- Live-Abnahme: noch nicht erneut in Windows-Brave geprüft. Erweiterung aktualisieren/neuladen, Chat-Tab neu laden, neue Antwort generieren; `stopEverSeen`, `GENERATING → FINALIZING → COMPLETED`, `lastCapture` und `POST /captures` bestätigen. Kein Auto-Send.
