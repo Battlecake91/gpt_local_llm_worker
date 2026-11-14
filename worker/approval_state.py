@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+from dataclasses import asdict
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -24,6 +25,8 @@ class ApprovalStore:
                 CREATE TABLE IF NOT EXISTS ssh_batches (
                     request_id TEXT PRIMARY KEY,
                     host_id TEXT NOT NULL,
+                    working_directory TEXT NOT NULL,
+                    description TEXT NOT NULL,
                     command_sha256 TEXT NOT NULL,
                     commands_json TEXT NOT NULL,
                     tab_id INTEGER NOT NULL,
@@ -47,17 +50,20 @@ class ApprovalStore:
     def propose(self, request: SSHBatchRequest, *, tab_id: int, conversation_id: str):
         if type(tab_id) is not int or tab_id <= 0 or not isinstance(conversation_id, str) or not conversation_id:
             raise ApprovalStateError("invalid_origin")
-        commands_json = json.dumps(request.commands, ensure_ascii=False, separators=(",", ":"))
+        commands_json = json.dumps([asdict(command) for command in request.commands], ensure_ascii=False, separators=(",", ":"))
         with self._connect() as db:
-            db.execute("INSERT OR IGNORE INTO ssh_batches VALUES (?,?,?,?,?,?,?,?,?)", (
-                request.request_id, request.host_id, request.command_sha256,
-                commands_json, tab_id, conversation_id, "PROPOSED", None, None
+            db.execute("INSERT OR IGNORE INTO ssh_batches VALUES (?,?,?,?,?,?,?,?,?,?,?)", (
+                request.request_id, request.host_id, request.working_directory,
+                request.description, request.command_sha256, commands_json,
+                tab_id, conversation_id, "PROPOSED", None, None
             ))
             row = db.execute(
-                "SELECT host_id, command_sha256, commands_json, tab_id, conversation_id FROM ssh_batches WHERE request_id=?",
+                "SELECT host_id, working_directory, description, command_sha256, commands_json, tab_id, conversation_id "
+                "FROM ssh_batches WHERE request_id=?",
                 (request.request_id,)
             ).fetchone()
-            if row != (request.host_id, request.command_sha256, commands_json, tab_id, conversation_id):
+            if row != (request.host_id, request.working_directory, request.description,
+                       request.command_sha256, commands_json, tab_id, conversation_id):
                 raise ApprovalStateError("request_id_collision")
         return request.request_id
 
@@ -104,11 +110,11 @@ class ApprovalStore:
     def get(self, request_id: str):
         with self._connect() as db:
             row = db.execute(
-                "SELECT host_id,command_sha256,commands_json,tab_id,conversation_id,status,approval_id,approved_by "
+                "SELECT host_id,working_directory,description,command_sha256,commands_json,tab_id,conversation_id,status,approval_id,approved_by "
                 "FROM ssh_batches WHERE request_id=?", (request_id,)
             ).fetchone()
         if row is None:
             return None
-        return dict(zip(("host_id", "command_sha256", "commands", "tab_id", "conversation_id",
-                         "status", "approval_id", "approved_by"),
-                        (row[0], row[1], json.loads(row[2]), *row[3:])))
+        return dict(zip(("host_id", "working_directory", "description", "command_sha256",
+                         "commands", "tab_id", "conversation_id", "status", "approval_id", "approved_by"),
+                        (row[0], row[1], row[2], row[3], json.loads(row[4]), *row[5:])))
