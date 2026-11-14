@@ -13,7 +13,7 @@ function setup({conversation='abc',empty=true,sendEnabled=true}={}){
   const chrome={runtime:{sendMessage:async obj=>outbound.push(obj),onMessage:{addListener:fn=>listeners.message=fn}}};
   const MutationObserver=class{observe(){}};
   const loc={href:`https://chatgpt.com/c/${conversation}`};
-  const context={globalThis:null,BridgeCore:core,chrome,document:doc,location:loc,MutationObserver,window:{addEventListener(){}},queueMicrotask,crypto:globalThis.crypto,TextEncoder,Date,InputEvent:class{},Event:class{},setTimeout,clearTimeout};context.globalThis=context;
+  const context={globalThis:null,BridgeCore:core,BridgeStopProbe:{StopProbe:class{reset(){}observe(){}snapshot(){return {controlStates:[]}}}},chrome,document:doc,location:loc,MutationObserver,window:{addEventListener(){}},queueMicrotask,crypto:globalThis.crypto,TextEncoder,Date,InputEvent:class{},Event:class{},setTimeout,clearTimeout};context.globalThis=context;
   vm.runInNewContext(source,context);
   const deliver=msg=>new Promise(resolve=>{listeners.message(msg,{},result=>resolve(result))});
   return {deliver,editor,sent,loc,outbound};
