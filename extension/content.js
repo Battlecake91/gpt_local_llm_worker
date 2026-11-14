@@ -141,8 +141,18 @@
         const setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;
         setter.call(editor,msg.text);editor.dispatchEvent(new Event('input',{bubbles:true}));
       }
-      const actual=editor.isContentEditable?editor.innerText:editor.value;
-      if(actual.replace(/\r\n/g,'\n')!==msg.text.replace(/\r\n/g,'\n'))throw Error('stage_verification_failed');
+      const normalizeLineEndings=s=>s.replace(/\r\n?/g,'\n');
+      const actual=normalizeLineEndings(editor.isContentEditable?editor.innerText:editor.value);
+      const expected=normalizeLineEndings(msg.text);
+      // ProseMirror may represent each hard break as a separate paragraph.
+      // Chromium's innerText then yields an extra blank line, although the
+      // inserted content appears correctly. This relaxation applies ONLY to
+      // STAGE_ONLY; auto-send must verify exact content before clicking.
+      const visualLines=s=>s.split('\n').filter(line=>line.length>0).join('\n');
+      const exact=actual===expected;
+      const visualOnly=!msg.auto_send && actual.length>0 &&
+        visualLines(actual)===visualLines(expected);
+      if(!exact && !visualOnly)throw Error('stage_verification_failed');
       // Re-check routing and generation after insertion. STAGE_ONLY must never click.
       if(core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_changed');
       if(document.querySelector(core.STOP))throw Error('generation_active');
