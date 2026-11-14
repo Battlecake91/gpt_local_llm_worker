@@ -191,3 +191,15 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 2. SQLite-Ledger mit produktivem FastAPI-Worker und persistentem Result-/Audit-System verbinden; Allowlist, SSH-Hostkey-Pinning, Executor, Ausgabelimit und Redaction implementieren. Keine Credentials aus ChatGPT-Text.
 3. Nur nach separater Testfreigabe realen Auto-Send-DOM-Pfad prüfen; in Brave hat `STAGE_ONLY` bisher nur `VISUAL_LINES` erreicht, nicht das für Auto-Send nötige `EXACT`.
 4. Windows-Branch aktualisieren und `node --test tests/*.cjs` sowie `python -m unittest discover -s tests -p 'test_*.py' -v` auf dem vollständigen Checkout ausführen.
+
+## Windows-Testbericht vom Benutzer (2026-11-14, 23:58 CET)
+- `git pull --ff-only origin feature/brave-chat-bridge`: Fast-forward bis `8b39187`, erfolgreich.
+- `node --test tests/*.cjs`: **53/53 PASS**, 0 Fehler, 0 übersprungen (direkter Windows-Log).
+- `py -m unittest discover -s tests -p 'test_*.py' -v`: **20 reguläre Tests erfolgreich**, aber zusätzlich ein Importfehler bei `test_contracts.py`, weil es `pytest` importiert und im verwendeten Python 3.13 nicht installiert ist; Abschluss `Ran 21 tests ... FAILED (errors=1)`. Der Fehler ist eine **Testumgebungs-/Runnerkonfiguration**, kein gemeldeter Assertion-Fehler in den neuen SSH-Tests.
+- `pyproject.toml` definiert ausdrücklich `[project.optional-dependencies].test = ["pytest>=8,<10"]` und `[tool.pytest.ini_options]`, während `tests/test_contracts.py` fünf pytest-Tests mit `tmp_path` enthält. Gemischte `unittest.TestCase`- und pytest-Funktionstests müssen durch `pytest` ausgeführt werden. `README.md` korrigiert.
+- Windows-Nachprüfung:
+  `py -m pip install -e ".[test]"`
+  `node --test tests/*.cjs`
+  `py -m pytest -q`
+  Nur den letzten Befehl erneut ausführen genügt nach der Installation, denn die 53 JS-Tests sind bereits bestätigt.
+- Vollständiger Python-pytest-Lauf unter Windows **noch offen**. Keine echten SSH-Ausführungen oder Auto-Send-Aktionen wurden durchgeführt.
