@@ -2,20 +2,24 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
+const {webcrypto,createHash}=require('node:crypto');
+const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
+const approval=text=>({job_id:'job-1',approval_id:'approved-1',host_id:'lab-host',command_sha256:digest('host=lab-host;commands=uptime'),result_sha256:digest(text)});
+const approvalGrant=(item)=>({allowed:true,claim_id:'claim123',kind:'approved_ssh_result',outbound_id:item.id,conversation_id:item.conversation_id,tab_id:item.tab_id,...item.approval});
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/background.js'),'utf8');
 function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,initialStore={}}={}){
   const store=new Map(Object.entries(initialStore)),calls=[],sent=[];const listeners={},s={};
   const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{}};
   const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>({id,url:'https://chatgpt.com/c/abc'}),sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async()=>[]},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
   const fetch=async(url,opt={})=>{calls.push({url,opt});if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
-  const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console};
+  const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console,crypto:webcrypto,TextEncoder};
   vm.runInNewContext(source,context);
   async function event(msg,sender={tab:{id:1}}){let replyValue;listeners.message(msg,sender,v=>replyValue=v);await new Promise(resolve=>setTimeout(resolve,20));return replyValue;}
   return {event,store,calls,sent};
 }
 test('stage-only never clicks send and acknowledges staging',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'STAGE_ONLY',text:'hello'}]});await h.event({type:'SET_TOKEN',token:'test'});assert.ok(h.sent.some(x=>x.type==='STAGE_MESSAGE'&&x.auto_send===false));assert.ok(h.calls.some(x=>x.url.endsWith('/ack')));});
 test('auto-send denied without verified claim',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'hello'}]});await h.event({type:'SET_TOKEN',token:'test'});assert.ok(!h.sent.some(x=>x.type==='STAGE_MESSAGE'));});
-test('approved result clicks once; persisted receipt blocks replay',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'hello'}],grant:{allowed:true,claim_id:'claim123',kind:'approved_ssh_result'}});await h.event({type:'SET_TOKEN',token:'test'});await h.event({type:'SYNC_NOW'});assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,1);assert.equal(h.store.get('receipt_x').status,'SUBMIT_CLICKED')});
+test('approved bound result clicks once; persisted receipt blocks replay',async()=>{const item={id:'x',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'hello',approval:approval('hello')};const h=harness({items:[item],grant:approvalGrant(item)});await h.event({type:'SET_TOKEN',token:'test'});await h.event({type:'SYNC_NOW'});assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,1);assert.equal(h.store.get('receipt_x').status,'SUBMIT_CLICKED')});
 test('wrong conversation prevents staging and auto sending',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'STAGE_ONLY',text:'hello'}],tabConv:'wrong'});await h.event({type:'SET_TOKEN',token:'test'});assert.ok(!h.sent.some(x=>x.type==='STAGE_MESSAGE'))});
 test('failed capture remains queued and is retried',async()=>{const h=harness({failCapture:true});await h.event({type:'SET_TOKEN',token:'test'});await h.event({type:'CAPTURE',payload:{message_id:'abc',text:'hello',conversation_id:'abc'}});assert.equal(h.store.get('pendingCaptures').length,1)});
 
@@ -55,9 +59,37 @@ test('persisted ATTEMPTING receipt blocks auto-send replay after MV3 restart',as
   assert.equal(h.calls.filter(x=>x.url.endsWith('/claim')).length,0);
 });
 test('concurrent sync requests cannot duplicate an auto-send',async()=>{
-  const h=harness({items:[{id:'one-time',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output'}],
-    grant:{allowed:true,claim_id:'claim',kind:'approved_ssh_result'}});
+  const item={id:'one-time',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output',approval:approval('output')};
+  const h=harness({items:[item],grant:approvalGrant(item)});
   await h.event({type:'SET_TOKEN',token:'test'});
   await Promise.all([h.event({type:'SYNC_NOW'}),h.event({type:'SYNC_NOW'})]);
   assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,1);
+});
+
+test('auto-send without immutable job attestation is rejected before claim',async()=>{
+  const item={id:'unbound',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output'};
+  const h=harness({items:[item],grant:{allowed:true,claim_id:'claim',kind:'approved_ssh_result'}});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/claim')).length,0);
+});
+test('auto-send fails closed when outbound result digest differs from text',async()=>{
+  const item={id:'tampered',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'tampered',approval:approval('original')};
+  const h=harness({items:[item],grant:approvalGrant(item)});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/claim')).length,0);
+});
+test('auto-send fails closed when claim binds a different approval or conversation',async()=>{
+  const item={id:'mismatch',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output',approval:approval('output')};
+  const grant=approvalGrant(item);grant.approval_id='different';
+  const h=harness({items:[item],grant});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
+test('legacy allow-and-claim alone cannot authorize automatic sending',async()=>{
+  const item={id:'old',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'output',approval:approval('output')};
+  const h=harness({items:[item],grant:{allowed:true,claim_id:'claim123',kind:'approved_ssh_result'}});
+  await h.event({type:'SET_TOKEN',token:'test'});
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
 });
