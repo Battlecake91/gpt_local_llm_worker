@@ -38,3 +38,50 @@ Das Mock-Backend stellt absichtlich keinen extern aufrufbaren Endpunkt zum Erste
 ## Rollback
 
 In `brave://extensions` die Erweiterung deaktivieren oder entfernen. Mock-Prozess mit Strg+C stoppen. Die Erweiterung verändert keine bestehenden Dienste, Container oder SSH-Konfigurationen.
+
+## Windows / Brave: konkreter Live-Smoke-Test (nur STAGE_ONLY)
+
+Die folgenden Befehle laufen in **PowerShell auf dem Windows-Rechner, auf dem Brave läuft**. Sie sind nicht für Linux Bash vorgesehen.
+
+1. Repository auf den Testbranch holen:
+
+```powershell
+git clone --branch feature/brave-chat-bridge https://github.com/Battlecake91/gpt_local_llm_worker.git
+Set-Location .\gpt_local_llm_worker
+```
+
+Bei vorhandenem Checkout stattdessen `git fetch origin`, `git switch feature/brave-chat-bridge` und `git pull --ff-only` verwenden. Fremde lokale Änderungen vorher prüfen.
+
+2. `brave://extensions` öffnen, Entwicklermodus einschalten, **Entpackte Erweiterung laden** wählen und das Verzeichnis `gpt_local_llm_worker\extension` auswählen. Die angezeigte 32-stellige Erweiterungs-ID kopieren.
+
+3. In PowerShell das isolierte Mock-Backend starten (die ID ersetzen; dieses Fenster geöffnet lassen):
+
+```powershell
+.\scripts\windows-brave-mock.ps1 -ExtensionId 'HIER_32_STELLIGE_ID'
+```
+
+4. Erweiterung über das Symbol öffnen. Im Seitenpanel `mock-test-token` bei **Lokales Worker-Token** eingeben und **Token für Sitzung setzen** klicken. Der Worker-Status muss `verbunden` anzeigen. Token wird nicht dauerhaft gespeichert und muss nach MV3-Worker-Neustart ggf. erneut eingegeben werden.
+
+5. In einer **eigens für diesen Test vorgesehenen** ChatGPT-Konversation (`https://chatgpt.com/c/...`) eine normale, unkritische Antwort erzeugen. Seitenpanel auf `GENERATING` → `FINALIZING` → `COMPLETED` und eine einzige erfolgreiche Capture-Übertragung prüfen. Vorhandene Antworten dürfen nicht erneut erfasst werden.
+
+6. Chat-ID aus der Adresszeile und Tab-ID aus der Seitenpanel-Anzeige `Tab <id>` ablesen. In einem **zweiten PowerShell-Fenster** im Repository-Verzeichnis ausführen:
+
+```powershell
+.\scripts\windows-brave-stage.ps1 -ConversationId 'CHAT_ID' -TabId 123
+```
+
+7. Im Seitenpanel **Jetzt synchronisieren** klicken. Der Text muss mit Zeilenumbruch im Eingabefeld stehen, ohne abgesendet zu werden. Anschließend den Text manuell aus dem Editor entfernen.
+
+8. Negativtests: falsche Chat-ID, anderer Browser-Tab, nicht leeres Eingabefeld, deaktivierte Erkennung, ausgeschalteter Mock-Worker. Es darf keine automatische ChatGPT-Nachricht erscheinen.
+
+**Auto-Send nicht im echten Chat testen.** Die Backend-Freigaben hierfür sind nur als isolierte Mock-Tests geprüft. Die Oberfläche und DOM-Selektoren von ChatGPT ändern sich regelmäßig, deshalb sind die obigen Ergebnisse auf dem konkreten Windows-Brave zu protokollieren.
+
+Bei fehlender PowerShell-Skriptausführungsfreigabe können die signierten Ausführungsrichtlinien der Maschine abweichen; diese Anleitung ändert keine globale Execution Policy.
+
+## Fehlerdiagnose
+
+- `worker_token_not_configured`: Token im Seitenpanel erneut setzen.
+- `worker_http_401`: Token im Backend und Panel stimmen nicht überein.
+- `Failed to fetch` / CORS: exakte Erweiterungs-ID in `-ExtensionId` prüfen, Mock-Neustart durchführen.
+- `editor_not_found` oder `stage_verification_failed`: DOM-Selektor der aktuellen ChatGPT-Oberfläche passt nicht, keinen automatischen Versand versuchen.
+- `conversation_mismatch`: Chat-ID und Tab-Zuordnung vor jedem Staging neu prüfen.
