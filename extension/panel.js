@@ -59,3 +59,70 @@ byId('copy-diagnostics').addEventListener('click',async()=>{
     byId('copy-result').textContent='Kopieren fehlgeschlagen: '+String(err);
   }
 });
+
+function sshNode(tag,text){
+  const node=document.createElement(tag);
+  if(text!==undefined)node.textContent=String(text);
+  return node;
+}
+async function refreshSSH(){
+  const status=byId('ssh-status'),container=byId('ssh-proposals');
+  status.textContent='Lade Vorschläge ...';
+  container.replaceChildren();
+  try{
+    const response=await chrome.runtime.sendMessage({type:'LIST_SSH_PROPOSALS'});
+    if(!response?.ok)throw Error(response?.error||'unbekannt');
+    const items=Array.isArray(response.items)?response.items:[];
+    status.textContent=items.length+' offene SSH-Aufträge';
+    for(const item of items){
+      if(!item || !Array.isArray(item.commands) || !item.commands.length ||
+         !/^[a-f0-9]{64}$/.test(item.command_sha256||''))continue;
+      const section=sshNode('section');section.className='ssh-proposal';
+      section.append(sshNode('h3','Auftrag '+item.request_id));
+      section.append(sshNode('p','Host: '+item.host_id+' | Chat: '+item.conversation_id+' | Tab: '+item.tab_id));
+      section.append(sshNode('p','Arbeitsverzeichnis: '+item.working_directory));
+      section.append(sshNode('p','Beschreibung (unverifizierter Modelltext): '+item.description));
+      section.append(sshNode('p','Befehlsblock SHA-256: '+item.command_sha256));
+      const listing=item.commands.map((cmd,index)=>
+        (index+1)+'. ['+cmd.id+'] Timeout '+cmd.timeout_seconds+'s\n'+cmd.command
+      ).join('\n\n');
+      section.append(sshNode('pre',listing));
+      const checkbox=sshNode('input');checkbox.type='checkbox';
+      const label=sshNode('label');
+      label.append(checkbox,document.createTextNode(' Ich habe alle Befehle und das Ziel geprüft und bestätige den gesamten Block.'));
+      section.append(label);
+      const approve=sshNode('button','Gesamten Block freigeben');
+      approve.type='button';approve.disabled=true;
+      const reject=sshNode('button','Ablehnen');reject.type='button';
+      checkbox.addEventListener('change',()=>{approve.disabled=!checkbox.checked;});
+      async function decide(action){
+        approve.disabled=true;reject.disabled=true;checkbox.disabled=true;
+        const decision={
+          action,request_id:item.request_id,command_sha256:item.command_sha256,
+          tab_id:item.tab_id,conversation_id:item.conversation_id,confirmed:true
+        };
+        try{
+          const answer=await chrome.runtime.sendMessage({type:'DECIDE_SSH_PROPOSAL',decision});
+          if(!answer?.ok)throw Error(answer?.error||'unbekannt');
+          status.textContent='Auftrag '+item.request_id+': '+answer.status;
+          await refreshSSH();
+        }catch(err){
+          status.textContent='Freigabe fehlgeschlagen: '+String(err);
+          checkbox.disabled=false;reject.disabled=false;
+          approve.disabled=!checkbox.checked;
+        }
+      }
+      approve.addEventListener('click',()=>{
+        if(!checkbox.checked)return;
+        decide('approve');
+      });
+      reject.addEventListener('click',()=>decide('reject'));
+      section.append(approve,reject);
+      container.append(section);
+    }
+  }catch(err){status.textContent='Fehler: '+String(err);}
+}
+byId('ssh-refresh').addEventListener('click',refreshSSH);
+byId('ssh-review').addEventListener('toggle',()=>{
+  if(byId('ssh-review').open)refreshSSH();
+});
