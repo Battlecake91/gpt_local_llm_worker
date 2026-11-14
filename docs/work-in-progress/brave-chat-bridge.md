@@ -1,38 +1,43 @@
-# Brave integration: capture and outbound message transport
+# Brave Chat Bridge, Entwicklungsauftrag 001
 
-Status: planned
-Integration base: feature/worker-mvp
-Implementation branch: feature/brave-chat-bridge
+Stand: 2026-11-14. Ausgangsbranch `feature/worker-mvp`; Implementierung auf `feature/brave-chat-bridge`. **Code, Tests und Dokumentation auf GitHub committed; realer Brave-Test offen.**
 
-## Goal
-Build a Brave/Chromium Manifest V3 extension that detects a newly completed ChatGPT assistant answer using the Stop button lifecycle, extracts the final message and supports receiving and submitting a new message through a controlled browser bridge.
+## Implementierte Komponenten
+- `extension/manifest.json`: Manifest V3, chatgpt.com Content-Script, Loopback-Hostberechtigung, Status-Seitenpanel.
+- `extension/bridge-core.js`: Stop-Button-Zustandsmaschine (IDLE, GENERATING, FINALIZING, COMPLETED, CANCELLED, ERROR), 650-ms-Stabilisierung.
+- `extension/content.js`: MutationObserver, SHA-256-Nachrichtenidentität, Tab-/Chatprüfung, Editor-Staging und bedingter Sendeklick.
+- `extension/background.js`: authentifizierte Loopback-API, Capture-Queue, Retry, Tab-Routing, einmalige Claims und persistierte Sendereceipts.
+- `extension/panel.*`: Status, Aktivierung und flüchtige Token-Eingabe.
+- `mock/backend.py`: FastAPI-Fixture ohne SSH-Ausführung oder echte Benutzerfreigabe.
+- `tests/`: deterministische Node-Fixtures und FastAPI-TestClient.
+- `docs/bridge-protocol.md` und `INSTALL.md`: API-Vertrag und Installation.
 
-## Scope
-- Content script, service worker and side panel.
-- State machine for running, completion, cancellation, reload, SPA navigation, tab/conversation identity and deduplication.
-- Capture text from the final assistant message, not prior history; preserve code blocks and line breaks.
-- Receive outbound text from a localhost adapter or mock, stage it, and submit through the ChatGPT composer only when explicitly authorized by the outbound policy.
-- Mock backend and test harness. No Ollama, SSH or live service deployment.
-- Explicitly distinguish API message delivery, composer insertion and actual submit acknowledgement.
+## Sicherheitsentscheidungen
+- Eingehende Inhalte sind Daten, keine Berechtigungen; die Erweiterung interpretiert keine SSH-Aufträge.
+- Auto-Send erfordert einen serverseitigen, einmalig vergebenen Claim für einen genehmigten SSH-Resultatauftrag mit derselben Chat-ID und Tab-ID.
+- `SUBMIT_CLICKED` bestätigt lediglich einen DOM-Klick, nicht die Annahme durch ChatGPT.
+- Versandversuche werden vor dem Klick gespeichert; unklare Ergebnisse dürfen nicht automatisch wiederholt werden.
+- Authentifizierungstoken nur im flüchtigen Speicher des MV3-Service-Workers.
+- Nur `https://chatgpt.com/c/<id>` wird als eindeutig identifizierte Konversation unterstützt.
 
-## Protected decisions
-- Stop button is the primary completion signal, with stabilization and cancellation checks.
-- Automatic outbound submission is reserved for the result of a previously approved SSH batch, and must be tied to the original conversation and tab.
-- Arbitrary inbound text may be staged for manual submission but must never auto-send.
-- Browser extension does not possess SSH credentials.
-- Least-privilege MV3 permissions and authenticated loopback transport.
-- Existing backend contracts in docs/protocol.md are not silently redefined.
+## Tatsächlich ausgeführte Offline-Tests
+- `node --test tests/*.cjs`: **20/20 PASS** (lokaler Paketstand am 14.11.2026).
+- `python -m unittest discover -s tests -p 'test_mock.py' -v`: **3/3 PASS**.
+- `node --check extension/*.js` einzeln: **PASS**.
+- Prüfung der GitHub-Übertragung erfolgt über GitHub-Dateiabruf; kein echter Browser-Smoke-Test durchgeführt.
 
-## Acceptance tests
-- One completed assistant message -> one capture, preserving code formatting.
-- Streaming and intermediate DOM changes -> no premature capture.
-- Manual stop -> no false success.
-- Reload, repeated DOM mutations and reconnect -> no duplicates.
-- Conversation/tab changes -> no cross-chat auto-send.
-- Outbound staging -> composer populated but not submitted without policy approval.
-- Approved-result fixture -> exactly one submit in correct conversation; delivery state persisted or reconciled.
-- API disconnect, timeout, 401, unexpected UI selectors -> visible failure and safe recovery.
-- Browser smoke test required before declaring runtime support.
+## Grenzen und offene Tests
+1. **Realer Brave/ChatGPT-Test offen**: DOM-Selektoren, Stop-Signal, Staging, Seitenpanel und CORS müssen mit einer ausdrücklich dafür bestimmten Testkonversation geprüft werden.
+2. Stop-Button-Verschwinden kann bei Plattformfehlern einem regulären Ende ähneln. Die Erweiterung kann dies nicht immer zuverlässig unterscheiden.
+3. Inhaltshash ohne eindeutige DOM-Nachrichten-ID kann identische Antworten in derselben Konversation deduplizieren.
+4. React/ProseMirror kann `execCommand` je nach ChatGPT-Version unterschiedlich verarbeiten; ein Verification-Failure verhindert Weiterleitung.
+5. Das Mock-Backend simuliert einen atomaren Claim, **nicht** die eigentliche SSH-Freigabeprüfung und nicht deren Persistenz.
+6. Die Queue des Mock-Backends ist im Speicher; Neustarts verlieren Mock-Nachrichten.
+7. Bis zum Browser-Test **keine produktive Nutzung und kein echter Auto-Send**.
+8. Die Tests sind keine vollständigen DOM-Integrationstests eines echten Brave-Browsers.
 
-## Handoff
-Implement independently on feature/brave-chat-bridge, maintain this document while unfinished, report tests and commits. Do not merge without user approval.
+## Außerhalb des Scopes
+Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches. Kein Merge nach main.
+
+## Nächste Schritte
+`INSTALL.md` für das Laden der Erweiterung und Mock-Backend verwenden. Ausschließlich `STAGE_ONLY` im Live-Browser manuell testen. Auto-Send nur mit separater ausdrücklicher Freigabe für isolierten Browser-Test.
