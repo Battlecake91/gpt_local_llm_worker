@@ -11,11 +11,18 @@
   function sourceText(element){
     const lines=Array.from(element.querySelectorAll?.(CODE_LINES) || []);
     if(lines.length)return lines.map(line=>(line.textContent||'').replace(/\r\n?/g,'\n')).join('\n');
-    const code=element.querySelector?.('code')||element;
+    // Modern ChatGPT wraps code in a data-code-block DIV. Its first child is
+    // a toolbar (language / run button); its second child contains the source.
+    // Never serialize the toolbar along with the program.
+    const modern=element.getAttribute?.('data-code-block')!==null &&
+      element.getAttribute?.('data-code-block')!==undefined;
+    const body=modern ? element.children?.[1] || nodes(element).filter(n=>n.nodeType===1)[1] : null;
+    const scope=body || element;
+    const code=scope.querySelector?.('pre,code') || scope;
     const raw=(code.textContent||'').replace(/\r\n?/g,'\n');
     const visual=code.innerText;
-    return raw.includes('\n') || typeof visual!=='string' || !visual.includes('\n')
-      ? raw : visual.replace(/\r\n?/g,'\n');
+    return typeof visual==='string' && visual.includes('\n')
+      ? visual.replace(/\r\n?/g,'\n') : raw;
   }
   function fencedCode(element){
     const code=element.querySelector?.('code')||element;
@@ -32,7 +39,7 @@
     const tag = element.tagName?.toUpperCase() || '';
     if (SKIP.has(tag) || element.getAttribute?.('aria-hidden') === 'true') return '';
     if (tag === 'BR') return '\n';
-    if (tag === 'PRE' || element.getAttribute?.('data-code-block') === 'true' ||
+    if (tag === 'PRE' || element.getAttribute?.('data-code-block') != null ||
         element.classList?.contains('cm-content') || element.classList?.contains('view-lines')) return fencedCode(element);
     let body = nodes(element).map(render).join('');
     if (!nodes(element).length) body = element.innerText ?? element.textContent ?? '';
