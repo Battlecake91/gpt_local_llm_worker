@@ -52,6 +52,11 @@ class SSHProtocolTests(unittest.TestCase):
                 with self.assertRaises(InvalidSSHRequest):
                     self.parse(request(commands=commands))
 
+    def test_duplicate_json_keys_are_rejected(self):
+        duplicate = request().replace('"host_id": "lab-nas"', '"host_id": "lab-nas", "host_id": "other"')
+        with self.assertRaisesRegex(InvalidSSHRequest, "duplicate_json_key"):
+            self.parse(duplicate)
+
     def test_digest_changes_with_host(self):
         first = self.parse(request())
         second = parse_ssh_request(request(host="other-nas"), {"other-nas"})
