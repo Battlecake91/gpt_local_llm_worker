@@ -4,6 +4,7 @@
   let active=true, tabConversation=core.conversation(location.href), observer, route=location.href;
   let sawUserStop=false, baseline=new Set(), lastProcessed='';
   let diagnosticsSignature='', stopEverSeen=false, scanCount=0;
+  const stopProbe=new globalThis.BridgeStopProbe.StopProbe();
   function reportDiagnostics(stop,node,role){
     // Only DOM metadata: never expose conversation or message text in diagnostics.
     const candidates=[...document.querySelectorAll('button')].filter(b=>
@@ -42,7 +43,7 @@
       stopDetected:!!stop, stopEverSeen, assistantCount:assistantNodes().length,
       lastRole:role||'none', lastAnswerLength:core.readable(node).length,
       hasConversation:!!tabConversation, candidateButtons:candidates, scanCount,
-      selectorCounts, attributeHints
+      selectorCounts, attributeHints, stopProbe:stopProbe.snapshot()
     };
     const signature=JSON.stringify({...debug,scanCount:0});
     if(signature!==diagnosticsSignature){
@@ -75,13 +76,14 @@
   },true);
   function scan(){
     if(!active)return;
-    if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();makeBaseline();}
+    if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();stopProbe.reset();makeBaseline();}
     if(sawUserStop){ if(!document.querySelector(core.STOP))sawUserStop=false;return; }
     const node=core.lastAssistant(document);
     const stop=document.querySelector(core.STOP);
     const role=core.lastTurnRole(document);
     scanCount++;
     if(stop)stopEverSeen=true;
+    stopProbe.observe(document,core.readable(node).length);
     reportDiagnostics(stop,node,role);
     lifecycle.observe({stop:!!stop,conv:tabConversation,node,text:core.readable(node),role});
   }
