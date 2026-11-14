@@ -55,6 +55,7 @@ test('STAGE_ONLY accepts Chromium ProseMirror paragraph-spacing differences with
   const h=setup({modernOnly:true,paragraphBreaks:true});
   const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'Erste Zeile\nZweite Zeile\nDritte Zeile',auto_send:false});
   assert.equal(result.status,'STAGED');
+  assert.equal(result.verification,'VISUAL_LINES');
   assert.equal(h.sent.count,0);
 });
 test('auto-send rejects ProseMirror paragraph-spacing differences even with claim',async()=>{
@@ -62,5 +63,12 @@ test('auto-send rejects ProseMirror paragraph-spacing differences even with clai
   const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'Erste\nZweite',auto_send:true,claim_id:'grant'});
   assert.equal(result.ok,false);
   assert.equal(result.error,'stage_verification_failed');
+  assert.equal(h.sent.count,0);
+});
+
+test('exact STAGE_ONLY content reports exact verification',async()=>{
+  const h=setup({modernOnly:true});
+  const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'Alpha\nBeta',auto_send:false});
+  assert.equal(result.verification,'EXACT');
   assert.equal(h.sent.count,0);
 });
