@@ -48,3 +48,21 @@ test('structure probe reports only bounded tags, counts and newline metadata',()
   assert.ok(!JSON.stringify(result).includes('PRIVATER TEXT'));
   assert.ok(!JSON.stringify(result).includes('SECRET CODE'));
 });
+
+test('modern editor-style code lines retain indentation and order',()=>{
+  const lines=[
+    el('div',[txt('def countdown(n):')]),
+    el('div',[txt('    for i in range(n):')]),
+    el('div',[txt('        print(i)')])
+  ];
+  const editor=el('div',lines,{'data-code-block':'true','data-language':'python'});
+  editor.querySelectorAll=selector=>selector.includes('.cm-line')?lines:[];
+  const result=extract(message([editor]));
+  assert.equal(result,'```python\ndef countdown(n):\n    for i in range(n):\n        print(i)\n```');
+});
+test('pre code prefers rendered line boundaries if textContent flattened',()=>{
+  const code=el('code',[txt('a=1b=2')]);
+  code.innerText='a=1\nb=2';
+  const pre=el('pre',[code]);
+  assert.equal(extract(message([pre])),'```\na=1\nb=2\n```');
+});
