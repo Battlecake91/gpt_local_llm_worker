@@ -24,7 +24,7 @@ $proposal = @{
 $text = ConvertTo-Json -InputObject $proposal -Depth 8 -Compress
 $sha = [Security.Cryptography.SHA256]::Create()
 try {
-    $messageId = [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).ToLowerInvariant()
+    $messageId = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-', '').ToLowerInvariant()
 } finally {
     $sha.Dispose()
 }
