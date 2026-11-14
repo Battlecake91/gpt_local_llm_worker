@@ -29,3 +29,22 @@ test('fences expand when code itself contains backticks',()=>{
   const pre=el('pre',[el('code',[txt('```\nexample')])]);
   assert.ok(extract(message([pre])).startsWith('````\n'));
 });
+
+test('preserves literal newlines in non-pre text nodes instead of collapsing whitespace',()=>{
+  const container=el('div',[txt('Zeile 1\n    Zeile 2\nZeile 3')]);
+  assert.equal(extract(message([container])),'Zeile 1\n    Zeile 2\nZeile 3');
+});
+test('emphasis and inline code stay distinguishable in transported message',()=>{
+  const p=el('p',[el('strong',[txt('Erklärung:')]),txt(' Nutze '),el('code',[txt('divmod()')]),txt(' für die Zeit.')]);
+  assert.equal(extract(message([p])),'**Erklärung:** Nutze `divmod()` für die Zeit.');
+});
+test('structure probe reports only bounded tags, counts and newline metadata',()=>{
+  const {inspectStructure}=require('../extension/extractor.js');
+  const root=el('div',[el('p',[txt('PRIVATER TEXT\nweiter')]),el('pre',[el('code',[txt('SECRET CODE')])])]);
+  const result=inspectStructure(root);
+  assert.equal(result.counts.pre,1);
+  assert.equal(result.counts.code,1);
+  assert.equal(result.outline.find(x=>x.tag==='p').directNewlines,1);
+  assert.ok(!JSON.stringify(result).includes('PRIVATER TEXT'));
+  assert.ok(!JSON.stringify(result).includes('SECRET CODE'));
+});
