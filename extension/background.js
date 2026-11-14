@@ -65,7 +65,13 @@ async function cycle(){
 chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   if(msg.type==='CAPTURE'){
     if(!state.captureEnabled || sender.tab?.id==null)return;
-    state.lastCapture={id:msg.payload.message_id,preview:msg.payload.text.slice(0,300),at:new Date().toISOString()};broadcast();
+    state.lastCapture={
+      id:msg.payload.message_id,
+      preview:msg.payload.text.slice(0,8000),
+      length:msg.payload.text.length,
+      truncated:msg.payload.text.length>8000,
+      at:new Date().toISOString()
+    };broadcast();
     submitCapture(msg.payload,sender.tab.id).catch(e=>{state.error=String(e);broadcast();});return;
   }
   if(msg.type==='OBSERVED_STATE'){
