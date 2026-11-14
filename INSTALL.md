@@ -85,3 +85,10 @@ Bei fehlender PowerShell-Skriptausführungsfreigabe können die signierten Ausf�
 - `Failed to fetch` / CORS: exakte Erweiterungs-ID in `-ExtensionId` prüfen, Mock-Neustart durchführen.
 - `editor_not_found` oder `stage_verification_failed`: DOM-Selektor der aktuellen ChatGPT-Oberfläche passt nicht, keinen automatischen Versand versuchen.
 - `conversation_mismatch`: Chat-ID und Tab-Zuordnung vor jedem Staging neu prüfen.
+
+## Diagnose: Worker verbunden, aber „Letzte Antwort: keine“
+Die Verbindung zum Mock-Backend beweist **nicht**, dass das Content-Script im bereits geöffneten ChatGPT-Tab läuft. Chromium injiziert deklarative Content-Scripts nach dem Laden/Neuladen der Zielseite. **Nach dem erstmaligen Installieren oder Neuladen der Erweiterung den ChatGPT-Tab mit Strg+R vollständig neu laden**, anschließend **eine weitere neue** Antwort generieren. Bereits abgeschlossene Antworten werden absichtlich nicht nachträglich übernommen.
+
+Im Seitenpanel unter **ChatGPT** muss ein Eintrag `Tab <Nummer>: IDLE (<Chat-ID>)` erscheinen. Fehlt er auch nach Strg+R, funktioniert die Script-Injektion oder die Browser-URL-Zuordnung nicht. Wenn der Eintrag bleibt, aber bei einer neuen Antwort nie `GENERATING` anzeigt, ist der Stop-Button-Selektor zu überprüfen. Falls `COMPLETED` erscheint, aber „Letzte Antwort“ leer ist, sind Konversationskennung und Deduplizierung zu untersuchen. Bei einer Capture-Übertragung muss im Uvicorn-Log `POST /api/bridge/v1/captures` erscheinen.
+
+Keine alte Antwort manuell als abgeschlossen markieren und keine Auto-Send-Funktion zum Testen aktivieren.
