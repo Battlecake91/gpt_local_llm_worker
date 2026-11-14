@@ -142,7 +142,6 @@ def reject_proposal(request_id: str, decision: ReviewDecision):
 def capture(data: Capture):
     if data.message_id in db.captures:
         return {"message_id":data.message_id,"status":"duplicate"}
-    db.captures[data.message_id] = data
     store = configured_approval_store()
     hosts = allowed_hosts()
     if store is not None and hosts:
@@ -154,6 +153,7 @@ def capture(data: Capture):
         except ApprovalStateError:
             # Request-ID collisions are never silently approved.
             raise HTTPException(409, "SSH proposal request-ID collision")
+    db.captures[data.message_id] = data
     return {"message_id":data.message_id,"status":"accepted"}
 
 @app.get('/api/bridge/v1/outbound', dependencies=[Depends(require_token)])
