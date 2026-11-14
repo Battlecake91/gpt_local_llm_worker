@@ -19,7 +19,7 @@ BRIDGE_MOCK_FIXTURES=1 \
 python -m uvicorn mock.backend:app --host 127.0.0.1 --port 8765
 ```
 
-4. Brave-Seitenpanel der Erweiterung öffnen, im Tokenfeld `mock-test-token` eingeben und **Token für Sitzung setzen** klicken. Token ist nur im Worker-Arbeitsspeicher, nach Suspend ggf. erneut setzen.
+4. Brave-Seitenpanel der Erweiterung öffnen, im Tokenfeld `mock-test-token` eingeben und **Token dauerhaft speichern** klicken. Token wird im lokalen Erweiterungsprofil gespeichert. Es bleibt nach Reloads erhalten, ist aber nicht durch einen Betriebssystem-Schlüsseltresor verschlüsselt.
 5. Eine explizit für Tests bestimmte ChatGPT-Konversation unter `https://chatgpt.com/c/<id>` öffnen. Eine neue Antwort erzeugen. Beobachten, ob der Stop-Button erscheint und verschwindet, und ob die Capture-Nachricht übertragen wurde.
 6. Für einen **reinen Staging-Test ohne automatisches Absenden** Browser-Tab-ID und Chat-ID aus dem Status bzw. der URL übernehmen und das folgende Kommando mit echten IDs ausführen:
 
@@ -60,7 +60,7 @@ Bei vorhandenem Checkout stattdessen `git fetch origin`, `git switch feature/bra
 .\scripts\windows-brave-mock.ps1 -ExtensionId 'HIER_32_STELLIGE_ID'
 ```
 
-4. Erweiterung über das Symbol öffnen. Im Seitenpanel `mock-test-token` bei **Lokales Worker-Token** eingeben und **Token für Sitzung setzen** klicken. Der Worker-Status muss `verbunden` anzeigen. Token wird nicht dauerhaft gespeichert und muss nach MV3-Worker-Neustart ggf. erneut eingegeben werden.
+4. Erweiterung über das Symbol öffnen. Im Seitenpanel `mock-test-token` bei **Lokales Worker-Token** eingeben und **Token für Sitzung setzen** klicken. Der Worker-Status muss `verbunden` anzeigen. Token wird nach erfolgreichem Speichern beim MV3-Worker-Neustart automatisch wieder geladen.
 
 5. In einer **eigens für diesen Test vorgesehenen** ChatGPT-Konversation (`https://chatgpt.com/c/...`) eine normale, unkritische Antwort erzeugen. Seitenpanel auf `GENERATING` → `FINALIZING` → `COMPLETED` und eine einzige erfolgreiche Capture-Übertragung prüfen. Vorhandene Antworten dürfen nicht erneut erfasst werden.
 
@@ -92,3 +92,38 @@ Die Verbindung zum Mock-Backend beweist **nicht**, dass das Content-Script im be
 Im Seitenpanel unter **ChatGPT** muss ein Eintrag `Tab <Nummer>: IDLE (<Chat-ID>)` erscheinen. Fehlt er auch nach Strg+R, funktioniert die Script-Injektion oder die Browser-URL-Zuordnung nicht. Wenn der Eintrag bleibt, aber bei einer neuen Antwort nie `GENERATING` anzeigt, ist der Stop-Button-Selektor zu überprüfen. Falls `COMPLETED` erscheint, aber „Letzte Antwort“ leer ist, sind Konversationskennung und Deduplizierung zu untersuchen. Bei einer Capture-Übertragung muss im Uvicorn-Log `POST /api/bridge/v1/captures` erscheinen.
 
 Keine alte Antwort manuell als abgeschlossen markieren und keine Auto-Send-Funktion zum Testen aktivieren.
+
+## Mock-SSH-Aufträge im Seitenpanel prüfen (ohne Ausführung)
+
+Diese Oberfläche ist ausdrücklich eine **isolierte Freigabeprobe**, kein produktiver SSH-Freigabeendpunkt. Sie verbindet weder einen SSH-Executor noch den automatischen ChatGPT-Rückkanal. Der Mock verwendet nur ein lokal gespeichertes Freigabeprotokoll. Eine Bestätigung darf nicht als echte SSH-Ausführung interpretiert werden.
+
+Mock-Prozess mit `Strg+C` beenden und unter Windows PowerShell mit bewusst aktivierter Host-Allowlist neu starten:
+
+```powershell
+cd C:\Users\steve\Projekte\NEUE_STRUKTUR\Software\gpt_local_llm_worker
+
+.\scripts\windows-brave-mock.ps1 -ExtensionId 'fmgkolabjpmlinbnofiidaggejfhpjpj' -ReviewHosts @('lab-nas')
+```
+
+Der Start setzt `BRIDGE_ALLOWED_HOSTS=lab-nas` und die Datenbank `%LOCALAPPDATA%\gpt-local-llm-worker\mock-review.sqlite3`. Nur explizite, syntaktisch gültige JSON-Aufträge auf konfigurierte Alias-Hosts werden als Vorschläge übernommen. `lab-nas` ist hier **nur ein Alias für die Mock-Prüfung**; es wird damit keine Netzwerkverbindung aufgebaut. Ohne `-ReviewHosts` bleibt diese Funktion deaktiviert.
+
+In einem zweiten PowerShell-Fenster eine absichtlich ungefährliche Vorschau anlegen. `-ConversationId` und `-TabId` müssen dem aktuell offenen Testchat entsprechen:
+
+```powershell
+cd C:\Users\steve\Projekte\NEUE_STRUKTUR\Software\gpt_local_llm_worker
+
+.\scripts\windows-brave-review.ps1 -ConversationId '6af8aaad-be34-83eb-89bb-ccc8b58ac1f3' -TabId 2006233083 -HostId 'lab-nas'
+```
+
+Im Seitenpanel den Abschnitt **SSH-Auftragsfreigabe (Mock, ohne Ausführung)** öffnen und **Aufträge aktualisieren** wählen. Der vollständige Auftrag enthält Hostalias, Originalchat/Tab, Arbeitsverzeichnis, vom Modell angegebene Beschreibung, Befehls-IDs, unveränderte Kommandozeilen, Timeouts und SHA-256-Digest.
+
+**Gesamten Block freigeben** ist nur mit aktivierter Bestätigungs-Checkbox möglich. **Ablehnen** ist eine eigene Aktion. Die Hintergrund-Erweiterung akzeptiert Review-Anfragen ausschließlich von ihrer eigenen Seitenpanel-Seite; der Backend-Endpoint verlangt unverändert den Bearer-Token und validiert Digest, Chat und Tab erneut. Der Mock speichert nur `APPROVED_FOR_MOCK_REVIEW` oder `REJECTED`. Keine SSH-Ausführung, kein Auto-Send.
+
+Prüfungen im Checkout:
+
+```powershell
+node --test tests/*.cjs
+py -m pytest -q
+```
+
+Bekannte Einschränkung: Ein produktiver Freigabedialog muss zusätzlich den **tatsächlich konfigurierten SSH-Benutzer** und relevante Nebenwirkungen aus vertrauenswürdiger Host-Konfiguration anzeigen. Die Mock-Oberfläche hat bewusst noch keine echte SSH-Benutzer-/Hostkey-Konfiguration und ist daher **nicht für produktive Freigaben geeignet**.
