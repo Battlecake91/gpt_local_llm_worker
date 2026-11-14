@@ -66,3 +66,15 @@ test('pre code prefers rendered line boundaries if textContent flattened',()=>{
   const pre=el('pre',[code]);
   assert.equal(extract(message([pre])),'```\na=1\nb=2\n```');
 });
+
+test('real Brave trace: div data-code-block with nested toolbar and visual source',()=>{
+  const header=el('div',[el('svg'),el('div',[txt('Python')]),el('div',[txt('Ausführen')])]);
+  const body=el('div',[el('div',[txt('import timedef countdown(sekunden):    print(sekunden)')])]);
+  body.innerText='import time\ndef countdown(sekunden):\n    print(sekunden)';
+  const block=el('div',[header,body],{'data-code-block':'python','data-language':'python'});
+  const explanation=el('p',[el('strong',[txt('Erklärung:')]),txt(' Dies ist der Timer.')]);
+  const wrapper=el('div',[el('p',[txt('Einleitung')]),block,explanation]);
+  const result=extract(message([wrapper]));
+  assert.equal(result,'Einleitung\n\n```python\nimport time\ndef countdown(sekunden):\n    print(sekunden)\n```\n\n**Erklärung:** Dies ist der Timer.');
+  assert.ok(!result.includes('Ausführen'));
+});
