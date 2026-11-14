@@ -67,6 +67,21 @@ class ApprovalStore:
                 raise ApprovalStateError("request_id_collision")
         return request.request_id
 
+    def pending(self, limit: int = 30):
+        """Return complete, immutable review data without any approval side effect."""
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT request_id,host_id,working_directory,description,command_sha256,"
+                "commands_json,tab_id,conversation_id FROM ssh_batches "
+                "WHERE status='PROPOSED' ORDER BY rowid LIMIT ?", (min(max(limit, 1), 100),)
+            ).fetchall()
+        return [
+            dict(request_id=row[0], host_id=row[1], working_directory=row[2],
+                 description=row[3], command_sha256=row[4], commands=json.loads(row[5]),
+                 tab_id=row[6], conversation_id=row[7])
+            for row in rows
+        ]
+
     def approve(self, request_id: str, *, command_sha256: str, authenticated_operator: str):
         """Call ONLY after the trusted approval UI displays and confirms the complete batch."""
         if not isinstance(authenticated_operator, str) or not authenticated_operator.strip():
