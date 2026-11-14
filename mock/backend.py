@@ -2,6 +2,8 @@
 import os
 from dataclasses import dataclass, field
 from typing import Literal
+import hashlib
+import re
 from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -21,12 +23,20 @@ class Capture(BaseModel):
     text: str
     observed_at: str
 
+class ApprovalBinding(BaseModel):
+    job_id: str
+    approval_id: str
+    host_id: str
+    command_sha256: str
+    result_sha256: str
+
 class Outbound(BaseModel):
     id: str
     conversation_id: str
     tab_id: int
     mode: Literal["STAGE_ONLY", "AUTO_SEND_APPROVED_RESULT"]
     text: str
+    approval: ApprovalBinding | None = None
     # Internal fixture marker; the API cannot create approvals from received text.
     approved_ssh_result: bool = False
     claim_id: str | None = None
@@ -35,6 +45,9 @@ class Outbound(BaseModel):
 class ClaimRequest(BaseModel):
     conversation_id: str
     tab_id: int
+    job_id: str | None = None
+    approval_id: str | None = None
+    result_sha256: str | None = None
 
 class Ack(BaseModel):
     status: Literal["STAGED", "SUBMIT_CLICKED", "ERROR", "UNKNOWN"]
@@ -85,13 +98,32 @@ def claim(id: str, request: ClaimRequest):
         raise HTTPException(403,'Not approved')
     if msg.conversation_id!=request.conversation_id or msg.tab_id!=request.tab_id:
         raise HTTPException(409,'Conversation mismatch')
+    binding=msg.approval
+    # A fixture flag alone is never enough to approve an outbound browser send.
+    if not binding:
+        raise HTTPException(403,'Missing immutable job binding')
+    expected={'job_id':binding.job_id,'approval_id':binding.approval_id,
+              'host_id':binding.host_id,'command_sha256':binding.command_sha256,
+              'result_sha256':binding.result_sha256}
+    if not all(re.fullmatch(r'[A-Za-z0-9._:-]{1,160}',v) for v in
+               (binding.job_id,binding.approval_id,binding.host_id)):
+        raise HTTPException(403,'Invalid job binding')
+    if not all(re.fullmatch(r'[0-9a-f]{64}',v) for v in
+               (binding.command_sha256,binding.result_sha256)):
+        raise HTTPException(403,'Invalid digest binding')
+    if hashlib.sha256(msg.text.encode('utf-8')).hexdigest()!=binding.result_sha256:
+        raise HTTPException(403,'Result content has changed')
+    if request.job_id!=binding.job_id or request.approval_id!=binding.approval_id or request.result_sha256!=binding.result_sha256:
+        raise HTTPException(403,'Claim request mismatch')
     if msg.claim_id is not None:
         raise HTTPException(409,'Already claimed')
     # An approval claim is intentionally one-time, including for a failed browser attempt.
     from secrets import token_urlsafe
     msg.claim_id=token_urlsafe(24)
     msg.status='CLAIMED'
-    return {"allowed":True,"claim_id":msg.claim_id,"kind":"approved_ssh_result"}
+    return {"allowed":True,"claim_id":msg.claim_id,"kind":"approved_ssh_result",
+            "outbound_id":id,"conversation_id":msg.conversation_id,"tab_id":msg.tab_id,
+            **expected}
 
 @app.post('/api/bridge/v1/outbound/{id}/ack', dependencies=[Depends(require_token)])
 def ack(id: str, receipt: Ack):
