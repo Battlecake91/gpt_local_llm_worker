@@ -57,3 +57,11 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - `tests/test_core.cjs`: Regression für wiederholte DOM-Mutationen sowie echte Textänderungen während der Stabilisierung ergänzt.
 - Verifiziert im isolierten lokalen Paket mit identischen Git-Blob-Hashes für die geänderten Erweiterungsdateien: `node --test tests/*.cjs` **22/22 PASS**, `python -m unittest discover -s tests -p 'test_mock.py' -v` **3/3 PASS**, `node --check` für alle Erweiterungs-JS-Dateien PASS.
 - Realer erneuter Windows-Livetest **ausstehend**: `git pull --ff-only`, Erweiterung über `brave://extensions` neu laden, ChatGPT-Tab mit Strg+R neu laden, neue Antwort erzeugen, Diagnosewerte im Seitenpanel auswerten. Kein Auto-Send.
+
+## Live DOM-Abweichung (2026-11-14)
+- Gemessene Werte: Tab 2006233083: `assistantCount=0`, `stopEverSeen=false`, `lastRole=none`, `hasConversation=true`, `scanCount=134`; Tab 2006233101 ebenfalls keine Nachrichten, `hasConversation=false`.
+- Ergebnis: Das Content-Script läuft und beobachtet DOM-Mutationen, aber aktuelle Legacy-Selektoren liefern keinen Assistant-Turn und keinen Stop-Button. Der Fehler ist **nicht** die Loopback-Verbindung.
+- Fix-Strategie: zuerst nur metadata-only Instrumentierung für alternative Marker, darunter `data-turn-key`, `data-content-search-unit-key`, `data-chatgpt-search-unit-key`, neue App-Shell-Attribute sowie ProseMirror-Composer. Keine automatische Sendefreigabe; keine Chat-Texte in der Diagnose.
+- Diagnose-Commit: `1d5acca315df06d988e55b5dc322e2d0e89d5b90`.
+- **Nächste Benutzerhandlung**: Git-Pull, Erweiterung und ChatGPT-Tab neu laden, eine neue Antwort erzeugen, den Bereich `selectorCounts` und `attributeHints` weitergeben. Erst danach den korrekten DOM-Adapter implementieren und reale Funktion erneut überprüfen.
+- Zusätzlicher Diagnose-Commit wurde nicht in einem realen Windows-Brave ausgeführt. Kein Erfolg der Antwort-Erkennung behauptet.
