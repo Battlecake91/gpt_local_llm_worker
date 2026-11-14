@@ -1,12 +1,13 @@
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm');
 const core=require('../extension/bridge-core.js');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/content.js'),'utf8');
-function setup({conversation='abc',empty=true,sendEnabled=true}={}){
+function setup({conversation='abc',empty=true,sendEnabled=true,modernOnly=false}={}){
   const outbound=[],sent={count:0},listeners={};
   const editor={isContentEditable:true,innerText:empty?'':'Existing text',textContent:'',focus(){},dispatchEvent(){}};
   const send={disabled:!sendEnabled,click(){sent.count++}};
   const doc={documentElement:{},querySelector(sel){
-    if(sel.includes('#prompt-textarea'))return editor;
+    if(modernOnly){if(sel.includes('form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]'))return editor;}
+    else if(sel.includes('#prompt-textarea'))return editor;
     if(sel.includes('[data-testid="send-button"]'))return send;
     return null;
   },querySelectorAll:()=>[],addEventListener(){},execCommand:(action,unused,text)=>{editor.innerText=text;return true}};
@@ -31,5 +32,21 @@ test('read-only preview never triggers capture, backend delivery or send',async(
   const reply=await h.deliver({type:'PREVIEW_CURRENT_REPLY'});
   assert.equal(reply.ok,false);
   assert.equal(h.outbound.length,prior);
+  assert.equal(h.sent.count,0);
+});
+
+test('modern ChatGPT ProseMirror composer stages multiline text without submit',async()=>{
+  const h=setup({modernOnly:true});
+  const text='Ergebnis:\n\n```sh\nprintf "test"\n```\n\nNur bereitstellen.';
+  const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text,auto_send:false});
+  assert.equal(result.status,'STAGED');
+  assert.equal(h.editor.innerText,text);
+  assert.equal(h.sent.count,0);
+});
+test('stage-only rejects blank text before editing',async()=>{
+  const h=setup({modernOnly:true});
+  const result=await h.deliver({type:'STAGE_MESSAGE',conversation_id:'abc',text:'',auto_send:false});
+  assert.equal(result.ok,false);
+  assert.equal(h.editor.innerText,'');
   assert.equal(h.sent.count,0);
 });
