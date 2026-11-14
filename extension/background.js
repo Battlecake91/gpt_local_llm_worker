@@ -93,14 +93,21 @@ async function outbound(){
       if(!item.approval || typeof item.text!=='string' || !item.text ||
          !['job_id','approval_id','host_id'].every(k=>typeof item.approval[k]==='string' && SAFE_ID.test(item.approval[k])) ||
          !['command_sha256','result_sha256'].every(k=>typeof item.approval[k]==='string' && HEX_SHA.test(item.approval[k])) ||
-         await sha256(item.text)!==item.approval.result_sha256)
+         await sha256(item.text)!==item.approval.result_sha256){
+        await chrome.storage.local.set({[key]:{status:'BLOCKED_INVALID_PAYLOAD',at:new Date().toISOString()}});
         throw Error('unbound_auto_send_result');
+      }
       const grant=await api(`/outbound/${encodeURIComponent(item.id)}/claim`,{method:'POST',body:JSON.stringify({
         conversation_id:item.conversation_id,tab_id:item.tab_id,
         job_id:item.approval.job_id,approval_id:item.approval.approval_id,
         result_sha256:item.approval.result_sha256
       })});
-      claimId=await validateGrant(item,grant);
+      try{claimId=await validateGrant(item,grant);}
+      catch(e){
+        // Invalid/replayed claims are terminal until explicit operator reconciliation.
+        await chrome.storage.local.set({[key]:{status:'BLOCKED_INVALID_CLAIM',at:new Date().toISOString()}});
+        throw e;
+      }
       automatic=true;
     }else if(item.mode!=='STAGE_ONLY'){throw Error('unknown_outbound_mode');}
     // Persist before click: fail closed on crash. Manual reconcile needed on ambiguous outcome.
