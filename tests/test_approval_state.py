@@ -9,8 +9,12 @@ from worker.approval_state import ApprovalStore, ApprovalStateError
 
 def batch(commands=None, request_id="req-1", host="lab-nas"):
     import json
-    data = dict(schema_version=1, type="ssh_batch_request", request_id=request_id,
-                host_id=host, commands=commands or ["uname -a", "df -h"])
+    data = dict(schema_version=1, kind="ssh_batch", request_id=request_id,
+                target=host, working_directory="/tmp", description="Diagnose",
+                commands=commands if commands is not None else [
+                    {"id":"one","command":"uname -a","timeout_seconds":15},
+                    {"id":"two","command":"df -h","timeout_seconds":30}
+                ])
     return parse_ssh_request(json.dumps(data), {host})
 
 
@@ -25,9 +29,10 @@ class ApprovalStateTests(unittest.TestCase):
 
     def test_approval_is_for_exact_complete_command_block(self):
         with self.assertRaisesRegex(ApprovalStateError, "approval_denied"):
-            self.db.approve("req-1", command_sha256=batch(["df -h"]).command_sha256,
+            self.db.approve("req-1", command_sha256=batch([{"id":"two","command":"df -h","timeout_seconds":30}]).command_sha256,
                             authenticated_operator="local-user")
         self.assertEqual(self.db.get("req-1")["status"], "PROPOSED")
+        self.assertEqual(self.db.get("req-1")["working_directory"], "/tmp")
         approval_id = self.db.approve("req-1", command_sha256=self.request.command_sha256,
                                       authenticated_operator="local-user")
         self.assertEqual(self.db.get("req-1")["approval_id"], approval_id)
@@ -55,10 +60,10 @@ class ApprovalStateTests(unittest.TestCase):
             restarted.claim_execution("req-1", approval_id)
 
     def test_request_id_collision_does_not_replace_batch(self):
-        changed = batch(["echo changed"])
+        changed = batch([{"id":"changed","command":"echo changed","timeout_seconds":15}])
         with self.assertRaisesRegex(ApprovalStateError, "request_id_collision"):
             self.db.propose(changed, tab_id=7, conversation_id="chat-abc")
-        self.assertEqual(self.db.get("req-1")["commands"], ["uname -a", "df -h"])
+        self.assertEqual([x["command"] for x in self.db.get("req-1")["commands"]], ["uname -a", "df -h"])
 
     def test_origin_is_immutable(self):
         with self.assertRaisesRegex(ApprovalStateError, "request_id_collision"):
