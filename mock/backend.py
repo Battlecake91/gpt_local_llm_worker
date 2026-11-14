@@ -108,8 +108,8 @@ def approve_proposal(request_id: str, decision: ReviewDecision):
     store = configured_approval_store()
     if store is None:
         raise HTTPException(403, "Approval review not configured")
-    proposal = next((item for item in store.pending(100) if item["request_id"] == request_id), None)
-    if proposal is None or proposal["conversation_id"] != decision.conversation_id or proposal["tab_id"] != decision.tab_id:
+    proposal = store.get(request_id)
+    if proposal is None or proposal["status"] != "PROPOSED" or proposal["conversation_id"] != decision.conversation_id or proposal["tab_id"] != decision.tab_id:
         raise HTTPException(409, "Origin or state changed")
     if proposal["command_sha256"] != decision.command_sha256:
         raise HTTPException(409, "Proposal digest changed")
@@ -127,8 +127,8 @@ def reject_proposal(request_id: str, decision: ReviewDecision):
     store = configured_approval_store()
     if store is None:
         raise HTTPException(403, "Approval review not configured")
-    proposal = next((item for item in store.pending(100) if item["request_id"] == request_id), None)
-    if proposal is None or proposal["command_sha256"] != decision.command_sha256 or (
+    proposal = store.get(request_id)
+    if proposal is None or proposal["status"] != "PROPOSED" or proposal["command_sha256"] != decision.command_sha256 or (
         proposal["conversation_id"] != decision.conversation_id or proposal["tab_id"] != decision.tab_id
     ):
         raise HTTPException(409, "Proposal changed")
