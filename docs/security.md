@@ -31,7 +31,7 @@ The MV3 extension only accesses `https://chatgpt.com/*` and `http://127.0.0.1/*`
 
 ## Offline SSH boundary and persistent approval ledger
 
-`worker/ssh_protocol.py` only parses explicit JSON protocol envelopes, rejects unknown/duplicate fields and unknown host aliases, enforces command and payload bounds, and computes a canonical SHA-256 over **host plus the complete ordered command list**. It **does not execute** any commands and never interprets `approved` in model content as authority.
+`worker/ssh_protocol.py` only parses explicit JSON protocol envelopes, rejects unknown/duplicate fields and unknown host aliases, enforces command and payload bounds, and computes a canonical SHA-256 over **target host alias, working directory, full ordered command list with IDs and timeouts, and description**. It **does not execute** any commands and never interprets `approved` in model content as authority.
 
 `worker/approval_state.py` is an isolated SQLite ledger: it persists immutable proposal text/digest, originating tab/conversation and approval identity. The application must authorize an **actual operator** before calling `approve()`, and its UI must show every exact command, configured SSH username and working directory, and relevant side effects. The Python method's `authenticated_operator` argument is a trust-boundary *contract*, not an authentication mechanism. There is no operator-facing approval endpoint yet, and no executor is wired to the ledger.
 
