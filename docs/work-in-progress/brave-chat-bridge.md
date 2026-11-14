@@ -49,3 +49,11 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Ausführungsstatus: **PowerShell-Skripte und realer Windows-Brave noch nicht auf dem Benutzerrechner gestartet**. Dieser isolierte Ausführungsraum hat keinen Zugriff auf den dort laufenden Browser.
 - Bestehende lokale Node-/Python-Fixture-Tests: 20/20 und 3/3 PASS; das ist kein Ersatz für einen Windows-Brave-Smoke-Test.
 - Folge-Commit der Windows-Installationsanleitung: `33a6de43677fee3850461d478259c8e6ea247771`.
+
+## Windows-Brave-Befund und Diagnose-Fix, 2026-11-14
+- Benutzer bestätigte: Mock-Worker im Seitenpanel **verbunden**; ChatGPT-Tab im Panel sichtbar. Eine neue vollständige Antwort wurde **nicht** als letzte Antwort erfasst. Die Ursache im Live-DOM ist noch nicht nachgewiesen.
+- Fix `extension/bridge-core.js`: Wiederholte unveränderte DOM-Mutationen dürfen das FINALIZING-Zeitfenster nicht unbegrenzt verlängern.
+- Diagnose `extension/content.js`, `background.js`, `panel.*`: Anzahl erkannter Assistentenantworten, letzte Nachrichtenrolle, Anzahl Textzeichen, Stop-Button-Erkennung (aktuell und jemals), alternative Kandidat-Button-Metadaten und Scan-Zähler je Tab. Diagnose zeigt **keinen Antworttext** und keine Tokens.
+- `tests/test_core.cjs`: Regression für wiederholte DOM-Mutationen sowie echte Textänderungen während der Stabilisierung ergänzt.
+- Verifiziert im isolierten lokalen Paket mit identischen Git-Blob-Hashes für die geänderten Erweiterungsdateien: `node --test tests/*.cjs` **22/22 PASS**, `python -m unittest discover -s tests -p 'test_mock.py' -v` **3/3 PASS**, `node --check` für alle Erweiterungs-JS-Dateien PASS.
+- Realer erneuter Windows-Livetest **ausstehend**: `git pull --ff-only`, Erweiterung über `brave://extensions` neu laden, ChatGPT-Tab mit Strg+R neu laden, neue Antwort erzeugen, Diagnosewerte im Seitenpanel auswerten. Kein Auto-Send.
