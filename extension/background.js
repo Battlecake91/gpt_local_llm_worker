@@ -31,6 +31,34 @@ async function api(path,options={}){
   state.connected=true;
   return response.json();
 }
+// A claim is usable only when it attests to this exact, immutable SSH result.
+// The server must additionally verify the user-approved command batch and job.
+const HEX_SHA=/^[a-f0-9]{64}$/;
+const SAFE_ID=/^[A-Za-z0-9._:-]{1,160}$/;
+async function sha256(text){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function validateGrant(item,grant){
+  const approval=item.approval;
+  if(!approval || !grant || grant.allowed!==true ||
+     grant.kind!=='approved_ssh_result' ||
+     typeof grant.claim_id!=='string' || !SAFE_ID.test(grant.claim_id) ||
+     typeof item.text!=='string' || !item.text.length)throw Error('invalid_backend_grant');
+  for(const key of ['job_id','approval_id','host_id']){
+    if(typeof approval[key]!=='string' || !SAFE_ID.test(approval[key]) ||
+       approval[key]!==grant[key])throw Error('approval_binding_mismatch');
+  }
+  for(const key of ['command_sha256','result_sha256']){
+    if(typeof approval[key]!=='string' || !HEX_SHA.test(approval[key]) ||
+       approval[key]!==grant[key])throw Error('approval_binding_mismatch');
+  }
+  if((await sha256(item.text))!==approval.result_sha256)throw Error('result_digest_mismatch');
+  if(item.conversation_id!==grant.conversation_id ||
+     item.tab_id!==grant.tab_id ||
+     item.id!==grant.outbound_id)throw Error('origin_binding_mismatch');
+  return grant.claim_id;
+}
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function submitCapture(payload,tabId){
   if(pending.has(payload.message_id))return;
@@ -61,9 +89,18 @@ async function outbound(){
     if(result?.conversation_id!==item.conversation_id)continue;
     let automatic=false,claimId=null;
     if(item.mode==='AUTO_SEND_APPROVED_RESULT'){
-      const grant=await api(`/outbound/${encodeURIComponent(item.id)}/claim`,{method:'POST',body:JSON.stringify({conversation_id:item.conversation_id,tab_id:item.tab_id})});
-      if(grant.allowed!==true || !grant.claim_id || grant.kind!=='approved_ssh_result')throw Error('invalid_backend_grant');
-      automatic=true;claimId=grant.claim_id;
+      // Reject malformed or unbound messages BEFORE attempting a one-time claim.
+      if(!item.approval || typeof item.text!=='string' || !item.text ||
+         !HEX_SHA.test(item.approval.result_sha256||'') ||
+         await sha256(item.text)!==item.approval.result_sha256)
+        throw Error('unbound_auto_send_result');
+      const grant=await api(`/outbound/${encodeURIComponent(item.id)}/claim`,{method:'POST',body:JSON.stringify({
+        conversation_id:item.conversation_id,tab_id:item.tab_id,
+        job_id:item.approval.job_id,approval_id:item.approval.approval_id,
+        result_sha256:item.approval.result_sha256
+      })});
+      claimId=await validateGrant(item,grant);
+      automatic=true;
     }else if(item.mode!=='STAGE_ONLY'){throw Error('unknown_outbound_mode');}
     // Persist before click: fail closed on crash. Manual reconcile needed on ambiguous outcome.
     if(automatic)await chrome.storage.local.set({[key]:{status:'ATTEMPTING',at:new Date().toISOString()}});
