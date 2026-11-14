@@ -8,7 +8,7 @@
   "background": {"service_worker": "background.js"},
   "content_scripts": [{
     "matches": ["https://chatgpt.com/*"],
-    "js": ["bridge-core.js", "content.js"],
+    "js": ["bridge-core.js", "stop-probe.js", "content.js"],
     "run_at": "document_idle"
   }],
   "side_panel": {"default_path": "panel.html"},
