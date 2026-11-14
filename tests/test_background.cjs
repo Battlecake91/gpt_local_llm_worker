@@ -129,3 +129,18 @@ test('trusted sidepanel verifies original chat before posting review decision',a
   assert.equal(result.ok,false);
   assert.equal(h.calls.length,baseline);
 });
+
+test('trusted sidepanel records verified mock approval without triggering browser send',async()=>{
+  const h=harness({initialStore:{workerBearerToken:'test'}});
+  const sender={url:'chrome-extension://testid/panel.html'};
+  const proposal={
+    action:'approve',request_id:'req-1',command_sha256:'a'.repeat(64),
+    tab_id:1,conversation_id:'abc',confirmed:true
+  };
+  const result=await h.event({type:'DECIDE_SSH_PROPOSAL',decision:proposal},sender);
+  assert.equal(result.ok,true);
+  const calls=h.calls.filter(x=>x.url.endsWith('/ssh/proposals/req-1/approve'));
+  assert.equal(calls.length,1);
+  assert.equal(JSON.parse(calls[0].opt.body).command_sha256,proposal.command_sha256);
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
