@@ -2,9 +2,20 @@
 (function (root) {
   'use strict';
   const STATES = Object.freeze({ IDLE:'IDLE', GENERATING:'GENERATING', FINALIZING:'FINALIZING', COMPLETED:'COMPLETED', CANCELLED:'CANCELLED', ERROR:'ERROR' });
-  const STOP = '[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop"],button[aria-label="Generierung stoppen"]';
-  const ASSISTANT = '[data-message-author-role="assistant"]';
-  const USER = '[data-message-author-role="user"]';
+  const STOP = '[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop streaming"],button[aria-label="Stop"],button[aria-label="Generierung stoppen"],button[aria-label="Antwortgenerierung stoppen"],button[aria-label="Antwort abbrechen"]';
+  // Legacy and modern ChatGPT use different turn metadata. Do not select nested message
+  // decorations: each modern content-search unit represents one message.
+  const ASSISTANT = '[data-message-author-role="assistant"],[data-content-search-unit-key$=":assistant"]';
+  const USER = '[data-message-author-role="user"],[data-content-search-unit-key$=":user"]';
+  function roleOf(node) {
+    if (!node) return null;
+    const legacy=node.getAttribute('data-message-author-role');
+    if (legacy==='assistant' || legacy==='user') return legacy;
+    const key=node.getAttribute('data-content-search-unit-key')||'';
+    if (key.endsWith(':assistant')) return 'assistant';
+    if (key.endsWith(':user')) return 'user';
+    return null;
+  }
   function conversation(url) {
     try { const u = new URL(url); if (u.hostname !== 'chatgpt.com') return null;
       const match = u.pathname.match(/^\/c\/([a-zA-Z0-9-]+)\/?$/);
@@ -13,18 +24,18 @@
   }
   function readable(node) {
     if (!node) return '';
-    const body = node.querySelector('.markdown, [class*="markdown"], [data-message-text]') || node;
+    const body = node.querySelector('[data-markdown-text-style="assistant-message"],.markdown,[data-message-text]') || node;
     // innerText preserves rendered line breaks and fenced/preformatted code in Chromium.
     return (body.innerText ?? body.textContent ?? '').replace(/\r\n/g, '\n');
   }
   function lastAssistant(doc) { return [...doc.querySelectorAll(ASSISTANT)].at(-1) || null; }
   function lastTurnRole(doc) {
     const all = [...doc.querySelectorAll(`${ASSISTANT},${USER}`)];
-    return all.at(-1)?.getAttribute('data-message-author-role') || null;
+    return roleOf(all.at(-1));
   }
   function messageIdentity(node, text, conv) {
     // No cryptographic claim: final SHA-256 id is generated asynchronously in content.js.
-    const domId = node?.getAttribute('data-message-id') || node?.id || '';
+    const domId = node?.getAttribute('data-message-id') || node?.getAttribute('data-content-search-unit-key') || node?.id || '';
     return `${conv}\u0000${domId}\u0000${text}`;
   }
   class Lifecycle {
@@ -60,6 +71,6 @@
       },this.stableMs);
     }
   }
-  root.BridgeCore={STATES, STOP, ASSISTANT, USER, conversation, readable, lastAssistant, lastTurnRole, messageIdentity, Lifecycle};
+  root.BridgeCore={STATES, STOP, ASSISTANT, USER, roleOf, conversation, readable, lastAssistant, lastTurnRole, messageIdentity, Lifecycle};
   if(typeof module!=='undefined')module.exports=root.BridgeCore;
 })(typeof globalThis!=='undefined'?globalThis:this);
