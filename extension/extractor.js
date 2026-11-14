@@ -5,21 +5,35 @@
   const SKIP = new Set(['BUTTON','SVG','STYLE','SCRIPT','NOSCRIPT','TEXTAREA','INPUT']);
   const BLOCK = new Set(['P','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','LI','UL','OL','TABLE','TR']);
   const nodes = element => Array.from(element.childNodes || []);
+  // Syntax highlighters and editors may render each source line as a separate div.
+  // textContent joins those lines; reconstruct from line elements before transport.
+  const CODE_LINES = '.cm-line,.view-line,[data-code-line]';
+  function sourceText(element){
+    const lines=Array.from(element.querySelectorAll?.(CODE_LINES) || []);
+    if(lines.length)return lines.map(line=>(line.textContent||'').replace(/\r\n?/g,'\n')).join('\n');
+    const code=element.querySelector?.('code')||element;
+    const raw=(code.textContent||'').replace(/\r\n?/g,'\n');
+    const visual=code.innerText;
+    return raw.includes('\n') || typeof visual!=='string' || !visual.includes('\n')
+      ? raw : visual.replace(/\r\n?/g,'\n');
+  }
+  function fencedCode(element){
+    const code=element.querySelector?.('code')||element;
+    const raw=sourceText(element).replace(/\n$/,'');
+    const language=/(?:^|\s)language-([\w+#.-]+)/.exec(code.getAttribute?.('class')||'')?.[1] ||
+      element.getAttribute?.('data-language')||'';
+    const ticks=raw.match(/`+/g)||[];
+    const fence='`'.repeat(Math.max(3,...ticks.map(t=>t.length+1)));
+    return `${fence}${language}\n${raw}\n${fence}\n\n`;
+  }
   function render(element) {
     if (element.nodeType === 3) return (element.textContent || '').replace(/\r\n?/g, '\n');
     if (element.nodeType !== 1) return '';
     const tag = element.tagName?.toUpperCase() || '';
     if (SKIP.has(tag) || element.getAttribute?.('aria-hidden') === 'true') return '';
     if (tag === 'BR') return '\n';
-    if (tag === 'PRE') {
-      const code = element.querySelector?.('code') || element;
-      const raw = (code.textContent || '').replace(/\r\n?/g, '\n').replace(/\n$/, '');
-      const className = code.getAttribute?.('class') || '';
-      const language = /(?:^|\s)language-([\w+#.-]+)/.exec(className)?.[1] || '';
-      const runs = raw.match(/`+/g) || [];
-      const fence = '`'.repeat(Math.max(3, ...runs.map(x => x.length + 1)));
-      return `${fence}${language}\n${raw}\n${fence}\n\n`;
-    }
+    if (tag === 'PRE' || element.getAttribute?.('data-code-block') === 'true' ||
+        element.classList?.contains('cm-content') || element.classList?.contains('view-lines')) return fencedCode(element);
     let body = nodes(element).map(render).join('');
     if (!nodes(element).length) body = element.innerText ?? element.textContent ?? '';
     if (tag === 'CODE') return `\`${body}\``;
@@ -51,7 +65,11 @@
       const children = nodes(node);
       const textNodes = children.filter(child => child.nodeType === 3);
       const newlines = textNodes.reduce((total,child) => total + ((child.textContent || '').match(/\n/g) || []).length, 0);
-      const marker = node.getAttribute?.('data-markdown-text-style') ? 'markdown' :
+      const marker = node.getAttribute?.('data-code-block') ? 'code-block' :
+        node.getAttribute?.('data-language') ? 'code-language' :
+        node.classList?.contains('cm-content') ? 'cm-content' :
+        node.classList?.contains('cm-line') ? 'cm-line' :
+        node.getAttribute?.('data-markdown-text-style') ? 'markdown' :
         node.getAttribute?.('data-testid') ? 'testid' :
         node.getAttribute?.('role') ? 'role' : '';
       outline.push({depth,tag,marker,children:children.length,textNodes:textNodes.length,
