@@ -4,7 +4,11 @@ const pending=new Map(), busy=new Set();
 let sessionToken=''; // Cached after protected extension-local storage has been loaded.
 let credentialsReady=null;
 const TOKEN_KEY='workerBearerToken';
+// Do not expose persisted tokens to content scripts. Fail closed if Chromium
+// cannot restrict storage to trusted extension contexts.
+const storageProtected=chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 async function credentials(){
+  await storageProtected;
   if(!credentialsReady)credentialsReady=chrome.storage.local.get([TOKEN_KEY]).then(data=>{
     sessionToken=typeof data[TOKEN_KEY]==='string'?data[TOKEN_KEY]:'';
   });
@@ -133,15 +137,13 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
   }
   if(msg.type==='SYNC_NOW'){cycle().then(()=>reply({ok:true}));return true;}
 });
-// Content scripts do not need access to persisted credentials or receipts.
-chrome.storage.local.setAccessLevel?.({accessLevel:'TRUSTED_CONTEXTS'}).catch(()=>{});
 chrome.tabs.onRemoved.addListener(id=>{delete state.tabs[id];broadcast();});
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
 Promise.all([credentials(),chrome.storage.local.get(['pendingCaptures','captureEnabled'])]).then(([,data])=>{
   state.captureEnabled=data.captureEnabled!==false;
   for(const item of data.pendingCaptures||[])pending.set(item.payload.message_id,item);
   state.pending=pending.size;state.tokenSaved=!!sessionToken;broadcast();cycle();
-});
+}).catch(e=>{state.error='storage_security_failed: '+String(e);broadcast();});
 // MV3 worker can be suspended. Alarm wakes it and drives bounded reconciliation.
 chrome.alarms?.create('bridge-sync',{periodInMinutes:0.5});
 chrome.alarms?.onAlarm.addListener(alarm=>{if(alarm.name==='bridge-sync')cycle();});
