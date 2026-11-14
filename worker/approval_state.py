@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 from worker.ssh_protocol import SSHBatchRequest
@@ -33,10 +34,15 @@ class ApprovalStore:
                 )
             """)
 
+    @contextmanager
     def _connect(self):
         db = sqlite3.connect(self.db_path, timeout=10, isolation_level="IMMEDIATE")
-        db.execute("PRAGMA busy_timeout=10000")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout=10000")
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def propose(self, request: SSHBatchRequest, *, tab_id: int, conversation_id: str):
         if type(tab_id) is not int or tab_id <= 0 or not isinstance(conversation_id, str) or not conversation_id:
