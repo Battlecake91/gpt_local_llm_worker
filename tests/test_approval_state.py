@@ -84,6 +84,24 @@ class ApprovalStateTests(unittest.TestCase):
         self.db.reject("req-1")
         self.assertEqual(self.db.pending(), [])
 
+    def test_mock_history_is_read_only_and_persists_result_origin(self):
+        approval_id = self.db.approve(
+            "req-1", command_sha256=self.request.command_sha256,
+            authenticated_operator="mock-sidepanel-confirmation")
+        self.db.claim_execution("req-1", approval_id)
+        self.db.finish_mock_execution("req-1", approval_id, {
+            "status": "SUCCEEDED", "mode": "MOCK_ONLY",
+            "commands": [{"id": "one", "stdout": "offline fixture"}]})
+        restarted = ApprovalStore(self.db_path)
+        history = restarted.recent_mock_results()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["request_id"], "req-1")
+        self.assertEqual(history[0]["conversation_id"], "chat-abc")
+        self.assertEqual(history[0]["tab_id"], 7)
+        self.assertEqual(history[0]["result"]["mode"], "MOCK_ONLY")
+        self.assertEqual(restarted.get("req-1")["status"], "SUCCEEDED")
+        self.assertEqual(restarted.recent_mock_results(limit=1), history)
+
     def test_duplicate_proposal_is_idempotent(self):
         self.db.propose(self.request, tab_id=7, conversation_id="chat-abc")
         self.assertEqual(self.db.get("req-1")["status"], "PROPOSED")
