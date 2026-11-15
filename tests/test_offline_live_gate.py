@@ -5,13 +5,12 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from worker.live_approval import LiveApprovalLedger, LiveAuthorizationError, LiveTargetBinding
 from worker.offline_live_gate import OfflineLiveApprovalGate
 from worker.operator_auth import OperatorAuthError, OperatorAuthenticator, create_password_record
 from worker.ssh_protocol import parse_ssh_request
-from worker.approval_state import ApprovalStore, ApprovalStateError
+from worker.approval_state import ApprovalStore
 
 
 class OfflineLiveGateTests(unittest.TestCase):
