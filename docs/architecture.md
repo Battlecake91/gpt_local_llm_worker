@@ -83,3 +83,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Persistenz des Betreiber-Credential-Records
 `worker/operator_credentials.py` ist ein isolierter Dateispeicher für den gesalzenen scrypt-Verifikator. Windows nutzt DPAPI (Current User); POSIX erfordert `0600`/eigenen Dateibesitzer sowie ein nicht durch Dritte beschreibbares Verzeichnis. Die Datei wird exklusiv erstellt und niemals überschrieben. Das Modul wird weder von `mock/backend.py` noch der Erweiterung, SSH-Ausführung oder einer aktivierten LIVE-API verwendet. Ein wirkliches Betreiber-Enrollment und die dauerhafte Fehlversuchssperre sind separate Arbeitsblöcke.
+
+### Persistente Authentifizierungsdrossel (unverdrahtet)
+`PersistentOperatorVerifier` serialisiert Passwortprüfungen verschiedener Instanzen über SQLite `BEGIN IMMEDIATE`. Die begrenzten Fehlversuche, Sperrfrist und zuletzt gesehene Uhrzeit sind pro Betreiber gespeichert; ein Neustart setzt die Sperre nicht zurück. Das ist ein reiner Offline-Vertrag und keine Browser-/HTTP-Freigabe. Der künftige Authentifizierungs-Einstieg darf den darunterliegenden `OperatorAuthenticator` nicht direkt als Umgehung aufrufen.
