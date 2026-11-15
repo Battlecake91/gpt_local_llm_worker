@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 
 from worker.approval_state import ApprovalStateError, ApprovalStore
+from worker.ssh_protocol import parse_ssh_request, InvalidSSHRequest
 
 HOSTKEY_PATTERN = re.compile(r"^SHA256:[A-Za-z0-9+/]{20,64}=?$")
 USER_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
@@ -78,6 +80,19 @@ class MockSSHExecutor:
             raise ApprovalStateError("mock_execution_denied")
         if row["command_sha256"] != command_sha256:
             raise ApprovalStateError("mock_digest_mismatch")
+        # Re-parse the exact stored batch, not just the already stored digest:
+        # accidental DB changes must not become commands under a valid approval.
+        payload = {
+            "schema_version": 1, "kind": "ssh_batch", "request_id": request_id,
+            "target": row["host_id"], "working_directory": row["working_directory"],
+            "description": row["description"], "commands": row["commands"],
+        }
+        try:
+            verified = parse_ssh_request(json.dumps(payload, ensure_ascii=False), {row["host_id"]})
+        except (InvalidSSHRequest, TypeError, ValueError) as exc:
+            raise ApprovalStateError("mock_persisted_batch_corrupted") from exc
+        if verified.command_sha256 != command_sha256:
+            raise ApprovalStateError("mock_persisted_batch_corrupted")
         host = self.hosts.get(row["host_id"])
         if host is None:
             raise ApprovalStateError("mock_host_not_configured")
