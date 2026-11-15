@@ -144,3 +144,19 @@ test('trusted sidepanel records verified mock approval without triggering browse
   assert.equal(JSON.parse(calls[0].opt.body).command_sha256,proposal.command_sha256);
   assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
 });
+
+test('mock history retrieval is restricted to the extension sidepanel',async()=>{
+  const h=harness({initialStore:{workerBearerToken:'test'}});
+  const baseline=h.calls.length;
+  const rejected=await h.event({type:'LIST_MOCK_RESULTS'},{
+    url:'https://chatgpt.com/c/abc',tab:{id:1}});
+  assert.equal(rejected.ok,false);
+  assert.equal(rejected.error,'untrusted_review_sender');
+  assert.equal(h.calls.length,baseline);
+  const accepted=await h.event({type:'LIST_MOCK_RESULTS'},{
+    url:'chrome-extension://testid/panel.html'});
+  assert.equal(accepted.ok,true);
+  assert.ok(Array.isArray(accepted.items));
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/ssh/mock-results')).length,1);
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
