@@ -1,6 +1,7 @@
 """End-to-end offline operator workflow. No SSH, browser or HTTP."""
 import json
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -113,7 +114,8 @@ class TrustedOperatorFlowTests(unittest.TestCase):
 
     def test_corrupt_throttle_database_denies_approval(self):
         flow = self.flow()
-        with sqlite3.connect(self.rate_path) as db:
+        # sqlite3 connection context commits but does not close on Windows.
+        with closing(sqlite3.connect(self.rate_path)) as db, db:
             db.execute("DROP TABLE operator_login_limits")
         with self.assertRaises(sqlite3.OperationalError):
             flow.approve("offline-test-1", "a-local-offline-testing-password-123")
