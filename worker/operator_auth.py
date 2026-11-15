@@ -35,7 +35,8 @@ class OperatorPasswordRecord:
     def __post_init__(self):
         if not isinstance(self.operator_id, str) or not self.operator_id.strip() or len(self.operator_id) > 80:
             raise OperatorAuthError("invalid_operator")
-        if len(self.salt) != _SALT_BYTES or len(self.password_hash) != _KEY_BYTES:
+        if (type(self.salt) is not bytes or type(self.password_hash) is not bytes
+                or len(self.salt) != _SALT_BYTES or len(self.password_hash) != _KEY_BYTES):
             raise OperatorAuthError("invalid_credential_record")
 
 
