@@ -138,6 +138,10 @@ class OperatorCredentialFile:
             raise CredentialStorageError("credential_symlink_denied")
         if not self.path.parent.is_dir():
             raise CredentialStorageError("credential_directory_missing")
+        if sys.platform != "win32":
+            directory = self.path.parent.stat()
+            if directory.st_uid != os.getuid() or directory.st_mode & 0o022:
+                raise CredentialStorageError("credential_directory_insecure")
 
     def create(self, record: OperatorPasswordRecord):
         if type(record) is not OperatorPasswordRecord:
@@ -179,8 +183,11 @@ class OperatorCredentialFile:
             mode = os.fstat(file.fileno()).st_mode
             if not stat.S_ISREG(mode):
                 raise CredentialStorageError("credential_not_regular_file")
-            if sys.platform != "win32" and mode & 0o077:
-                raise CredentialStorageError("credential_permissions_too_open")
+            if sys.platform != "win32":
+                if mode & 0o077:
+                    raise CredentialStorageError("credential_permissions_too_open")
+                if os.fstat(file.fileno()).st_uid != os.getuid():
+                    raise CredentialStorageError("credential_owner_mismatch")
             data = file.read(MAX_RECORD_BYTES + 1)
         try:
             if len(data) > MAX_RECORD_BYTES:
