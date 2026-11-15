@@ -1,5 +1,6 @@
 """No SSH, no browser, no network: durable gate and restart tests."""
 import tempfile
+import sqlite3
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,70 @@ class ApprovalStateTests(unittest.TestCase):
         self.db = ApprovalStore(self.db_path)
         self.request = batch()
         self.db.propose(self.request, tab_id=7, conversation_id="chat-abc")
+
+    def test_all_new_proposals_are_mock_scoped(self):
+        self.assertEqual(self.db.get("req-1")["approval_scope"], "MOCK")
+        self.assertEqual(len(self.db.pending()), 1)
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "approval_scope_immutable"):
+            with self.db._connect() as db:
+                db.execute("UPDATE ssh_batches SET approval_scope='LIVE' WHERE request_id='req-1'")
+        self.assertEqual(self.db.get("req-1")["approval_scope"], "MOCK")
+
+    def test_live_scoped_row_cannot_be_handled_by_mock_methods(self):
+        with self.db._connect() as db:
+            db.execute(
+                "INSERT INTO ssh_batches "
+                "(request_id,host_id,working_directory,description,command_sha256,"
+                "commands_json,tab_id,conversation_id,status,approval_id,approved_by,approval_scope) "
+                "SELECT 'live-test',host_id,working_directory,description,command_sha256,"
+                "commands_json,tab_id,conversation_id,'PROPOSED',NULL,NULL,'LIVE' "
+                "FROM ssh_batches WHERE request_id='req-1'"
+            )
+        self.assertEqual([x["request_id"] for x in self.db.pending()], ["req-1"])
+        with self.assertRaisesRegex(ApprovalStateError, "approval_denied"):
+            self.db.approve("live-test", command_sha256=self.request.command_sha256,
+                            authenticated_operator="local-user")
+        with self.assertRaisesRegex(ApprovalStateError, "rejection_denied"):
+            self.db.reject("live-test")
+        with self.db._connect() as db:
+            db.execute("UPDATE ssh_batches SET status='APPROVED',approval_id='future-live-only' "
+                       "WHERE request_id='live-test'")
+        with self.assertRaisesRegex(ApprovalStateError, "execution_denied"):
+            self.db.claim_execution("live-test", "future-live-only")
+        with self.db._connect() as db:
+            db.execute("UPDATE ssh_batches SET status='RUNNING' WHERE request_id='live-test'")
+        self.assertEqual(self.db.recover_unknown(), 0)
+        self.assertEqual(self.db.get("live-test")["status"], "RUNNING")
+
+    def test_old_database_migrates_existing_rows_to_mock_scope(self):
+        legacy = Path(self.tmp.name) / "old.sqlite"
+        with sqlite3.connect(legacy) as connection:
+            connection.execute(
+                "CREATE TABLE ssh_batches ("
+                "request_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,"
+                "working_directory TEXT NOT NULL, description TEXT NOT NULL,"
+                "command_sha256 TEXT NOT NULL, commands_json TEXT NOT NULL,"
+                "tab_id INTEGER NOT NULL, conversation_id TEXT NOT NULL,"
+                "status TEXT NOT NULL, approval_id TEXT UNIQUE, approved_by TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO ssh_batches VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                ("legacy-approved", "lab-nas", "/tmp", "Diagnose",
+                 self.request.command_sha256,
+                 '[{"id":"one","command":"uname -a","timeout_seconds":15},'
+                 '{"id":"two","command":"df -h","timeout_seconds":30}]',
+                 7, "chat-abc", "APPROVED", "old-mock-approval", "mock-sidepanel-confirmation")
+            )
+        upgraded = ApprovalStore(legacy)
+        self.assertEqual(upgraded.get("legacy-approved")["approval_scope"], "MOCK")
+        self.assertEqual(upgraded.get("legacy-approved")["approval_id"], "old-mock-approval")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "approval_scope_immutable"):
+            with upgraded._connect() as db:
+                db.execute(
+                    "UPDATE ssh_batches SET approval_scope='LIVE' WHERE request_id='legacy-approved'"
+                )
+        with self.assertRaisesRegex(ApprovalStateError, "request_id_collision"):
+            upgraded.propose(self.request, tab_id=7, conversation_id="chat-abc")
 
     def test_approval_is_for_exact_complete_command_block(self):
         with self.assertRaisesRegex(ApprovalStateError, "approval_denied"):
