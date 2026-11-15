@@ -147,12 +147,15 @@ test('trusted sidepanel records verified mock approval without triggering browse
 
 test('mock history retrieval is restricted to the extension sidepanel',async()=>{
   const h=harness({initialStore:{workerBearerToken:'test'}});
-  const baseline=h.calls.length;
+  // The MV3 worker may run its startup /outbound sync concurrently.
+  // Only requests to the protected history endpoint are relevant here.
+  const historyCalls=()=>h.calls.filter(x=>x.url.endsWith('/ssh/mock-results')).length;
+  const baseline=historyCalls();
   const rejected=await h.event({type:'LIST_MOCK_RESULTS'},{
     url:'https://chatgpt.com/c/abc',tab:{id:1}});
   assert.equal(rejected.ok,false);
   assert.equal(rejected.error,'untrusted_review_sender');
-  assert.equal(h.calls.length,baseline);
+  assert.equal(historyCalls(),baseline);
   const accepted=await h.event({type:'LIST_MOCK_RESULTS'},{
     url:'chrome-extension://testid/panel.html'});
   assert.equal(accepted.ok,true);
