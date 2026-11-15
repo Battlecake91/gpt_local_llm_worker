@@ -134,6 +134,19 @@ class MockExecutorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mock_host_alias_mismatch"):
             MockSSHExecutor(self.store, {"wrong": MockHost("lab-nas", "mockuser", HOST_PIN)})
 
+    def test_tampered_stored_command_cannot_run_under_old_digest(self):
+        with self.store._connect() as db:
+            row = db.execute(
+                "SELECT commands_json FROM ssh_batches WHERE request_id='job-1'"
+            ).fetchone()
+            altered = json.loads(row[0])
+            altered[0]["command"] = "changed after approval"
+            db.execute("UPDATE ssh_batches SET commands_json=? WHERE request_id='job-1'",
+                       (json.dumps(altered),))
+        with self.assertRaisesRegex(ApprovalStateError, "mock_persisted_batch_corrupted"):
+            self.execute()
+        self.assertEqual(self.store.get("job-1")["status"], "APPROVED")
+
     def test_unapproved_or_rejected_cannot_execute(self):
         self.store.propose(
             parse_ssh_request(json.dumps({
