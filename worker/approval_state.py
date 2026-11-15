@@ -33,9 +33,20 @@ class ApprovalStore:
                     conversation_id TEXT NOT NULL,
                     status TEXT NOT NULL,
                     approval_id TEXT UNIQUE,
-                    approved_by TEXT
+                    approved_by TEXT,
+                    approval_scope TEXT NOT NULL DEFAULT 'MOCK'
+                        CHECK (approval_scope IN ('MOCK', 'LIVE'))
                 )
             """)
+            # Existing databases predate approval_scope. Every legacy approval
+            # was created by the mock-only UI and must stay mock-only forever.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(ssh_batches)")}
+            if "approval_scope" not in columns:
+                db.execute(
+                    "ALTER TABLE ssh_batches ADD COLUMN approval_scope TEXT "
+                    "NOT NULL DEFAULT 'MOCK' "
+                    "CHECK (approval_scope IN ('MOCK', 'LIVE'))"
+                )
             db.execute("""
                 CREATE TABLE IF NOT EXISTS mock_execution_results (
                     request_id TEXT PRIMARY KEY REFERENCES ssh_batches(request_id),
@@ -59,18 +70,22 @@ class ApprovalStore:
             raise ApprovalStateError("invalid_origin")
         commands_json = json.dumps([asdict(command) for command in request.commands], ensure_ascii=False, separators=(",", ":"))
         with self._connect() as db:
-            db.execute("INSERT OR IGNORE INTO ssh_batches VALUES (?,?,?,?,?,?,?,?,?,?,?)", (
+            db.execute(
+                "INSERT OR IGNORE INTO ssh_batches "
+                "(request_id,host_id,working_directory,description,command_sha256,"
+                "commands_json,tab_id,conversation_id,status,approval_id,approved_by,approval_scope) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (
                 request.request_id, request.host_id, request.working_directory,
                 request.description, request.command_sha256, commands_json,
-                tab_id, conversation_id, "PROPOSED", None, None
+                tab_id, conversation_id, "PROPOSED", None, None, "MOCK"
             ))
             row = db.execute(
-                "SELECT host_id, working_directory, description, command_sha256, commands_json, tab_id, conversation_id "
+                "SELECT host_id, working_directory, description, command_sha256, commands_json, tab_id, conversation_id, approval_scope "
                 "FROM ssh_batches WHERE request_id=?",
                 (request.request_id,)
             ).fetchone()
             if row != (request.host_id, request.working_directory, request.description,
-                       request.command_sha256, commands_json, tab_id, conversation_id):
+                       request.command_sha256, commands_json, tab_id, conversation_id, "MOCK"):
                 raise ApprovalStateError("request_id_collision")
         return request.request_id
 
@@ -80,7 +95,7 @@ class ApprovalStore:
             rows = db.execute(
                 "SELECT request_id,host_id,working_directory,description,command_sha256,"
                 "commands_json,tab_id,conversation_id FROM ssh_batches "
-                "WHERE status='PROPOSED' ORDER BY rowid LIMIT ?", (min(max(limit, 1), 100),)
+                "WHERE status='PROPOSED' AND approval_scope='MOCK' ORDER BY rowid LIMIT ?", (min(max(limit, 1), 100),)
             ).fetchall()
         return [
             dict(request_id=row[0], host_id=row[1], working_directory=row[2],
@@ -95,11 +110,12 @@ class ApprovalStore:
             raise ApprovalStateError("missing_operator")
         approval_id = secrets.token_urlsafe(24)
         with self._connect() as db:
-            row = db.execute("SELECT command_sha256, status FROM ssh_batches WHERE request_id=?", (request_id,)).fetchone()
-            if row is None or row[0] != command_sha256 or row[1] != "PROPOSED":
+            row = db.execute("SELECT command_sha256, status, approval_scope FROM ssh_batches WHERE request_id=?", (request_id,)).fetchone()
+            if row is None or row[0] != command_sha256 or row[1] != "PROPOSED" or row[2] != "MOCK":
                 raise ApprovalStateError("approval_denied")
             updated = db.execute(
-                "UPDATE ssh_batches SET status='APPROVED', approval_id=?, approved_by=? WHERE request_id=? AND status='PROPOSED'",
+                "UPDATE ssh_batches SET status='APPROVED', approval_id=?, approved_by=? "
+                "WHERE request_id=? AND status='PROPOSED' AND approval_scope='MOCK'",
                 (approval_id, authenticated_operator, request_id)
             ).rowcount
             if updated != 1:
@@ -108,7 +124,7 @@ class ApprovalStore:
 
     def reject(self, request_id: str):
         with self._connect() as db:
-            if db.execute("UPDATE ssh_batches SET status='REJECTED' WHERE request_id=? AND status='PROPOSED'",
+            if db.execute("UPDATE ssh_batches SET status='REJECTED' WHERE request_id=? AND status='PROPOSED' AND approval_scope='MOCK'",
                           (request_id,)).rowcount != 1:
                 raise ApprovalStateError("rejection_denied")
 
@@ -116,7 +132,8 @@ class ApprovalStore:
         """Persist RUNNING before any executor could be invoked. Never auto-retry."""
         with self._connect() as db:
             changed = db.execute(
-                "UPDATE ssh_batches SET status='RUNNING' WHERE request_id=? AND approval_id=? AND status='APPROVED'",
+                "UPDATE ssh_batches SET status='RUNNING' WHERE request_id=? AND approval_id=? "
+                "AND status='APPROVED' AND approval_scope='MOCK'",
                 (request_id, approval_id)
             ).rowcount
             if changed != 1:
@@ -138,7 +155,8 @@ class ApprovalStore:
             raise ApprovalStateError("mock_result_too_large")
         with self._connect() as db:
             updated = db.execute(
-                "UPDATE ssh_batches SET status=? WHERE request_id=? AND approval_id=? AND status='RUNNING'",
+                "UPDATE ssh_batches SET status=? WHERE request_id=? AND approval_id=? "
+                "AND status='RUNNING' AND approval_scope='MOCK'",
                 (result["status"], request_id, approval_id)
             ).rowcount
             if updated != 1:
@@ -156,7 +174,7 @@ class ApprovalStore:
             rows = db.execute(
                 "SELECT b.request_id,b.host_id,b.conversation_id,b.tab_id,b.status,r.result_json "
                 "FROM mock_execution_results AS r "
-                "JOIN ssh_batches AS b ON b.request_id=r.request_id "
+                "JOIN ssh_batches AS b ON b.request_id=r.request_id AND b.approval_scope='MOCK' "
                 "ORDER BY r.rowid DESC LIMIT ?", (min(max(limit, 1), 100),)
             ).fetchall()
         return [
@@ -176,11 +194,11 @@ class ApprovalStore:
     def get(self, request_id: str):
         with self._connect() as db:
             row = db.execute(
-                "SELECT host_id,working_directory,description,command_sha256,commands_json,tab_id,conversation_id,status,approval_id,approved_by "
+                "SELECT host_id,working_directory,description,command_sha256,commands_json,tab_id,conversation_id,status,approval_id,approved_by,approval_scope "
                 "FROM ssh_batches WHERE request_id=?", (request_id,)
             ).fetchone()
         if row is None:
             return None
         return dict(zip(("host_id", "working_directory", "description", "command_sha256",
-                         "commands", "tab_id", "conversation_id", "status", "approval_id", "approved_by"),
+                         "commands", "tab_id", "conversation_id", "status", "approval_id", "approved_by", "approval_scope"),
                         (row[0], row[1], row[2], row[3], json.loads(row[4]), *row[5:])))
