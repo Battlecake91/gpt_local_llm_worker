@@ -86,3 +86,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Persistente Authentifizierungsdrossel (unverdrahtet)
 `PersistentOperatorVerifier` serialisiert Passwortprüfungen verschiedener Instanzen über SQLite `BEGIN IMMEDIATE`. Die begrenzten Fehlversuche, Sperrfrist und zuletzt gesehene Uhrzeit sind pro Betreiber gespeichert; ein Neustart setzt die Sperre nicht zurück. Das ist ein reiner Offline-Vertrag und keine Browser-/HTTP-Freigabe. Der künftige Authentifizierungs-Einstieg darf den darunterliegenden `OperatorAuthenticator` nicht direkt als Umgehung aufrufen.
+
+### Offline Operator Login → LIVE Approval
+`TrustedOfflineOperatorFlow` in `worker/trusted_operator_flow.py` verknüpft die bereits gespeicherte Betreiberidentität mit der neustartfesten Fehlversuchssperre und dem atomaren LIVE-Audit-Gate. Die öffentliche Methode `approve(request_id, password)` akzeptiert keine Ziel-/Digest-Overrides und benutzt ausschließlich die Bindungswerte des bestehenden `live_proposals`-Datensatzes. Kein CLI-/HTTP-/Brave-Import, kein SSH-Aufruf. Ein künftiges vertrauenswürdiges Benutzerinterface muss diesen Weg nutzen, niemals einen direkten `OperatorAuthenticator.verify_for_proposal`-Aufruf.
