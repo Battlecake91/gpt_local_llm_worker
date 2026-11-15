@@ -71,7 +71,9 @@ class OperatorReviewController:
         flow: TrustedOfflineOperatorFlow,
         configured_targets: dict[str, LiveTargetBinding],
     ):
-        if type(ledger) is not LiveApprovalLedger or type(flow) is not TrustedOfflineOperatorFlow:
+        if (type(ledger) is not LiveApprovalLedger
+                or type(flow) is not TrustedOfflineOperatorFlow
+                or flow._ledger is not ledger):
             raise LiveAuthorizationError("trusted_review_components_required")
         if not isinstance(configured_targets, dict):
             raise LiveAuthorizationError("configured_target_list_required")
