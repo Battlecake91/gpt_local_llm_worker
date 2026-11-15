@@ -68,3 +68,6 @@ The isolated mock backend now exposes authenticated `GET /api/bridge/v1/ssh/mock
 
 ### Offline ApprovalStore-to-Transport Contract (2026-11-15)
 `worker/execution_coordinator.py` bridges a previously approved SQLite batch to an injected **fixture-only** transport for test coverage of ordered command execution, immutable digest validation, single-use `APPROVED → RUNNING`, terminal result persistence, fail-stop, and crash recovery to `UNKNOWN`. It deliberately rejects ordinary transport objects and has no endpoint, CLI, or scheduled entry point. An additional `FixtureOnlyPermit` object must be supplied by test code. This marker is not a production authentication mechanism; do not connect it to HTTP, UI or real SSH. A distinct, authenticated real execution authorization and durable audit trail are required for any future live integration.
+
+### Provenienz von Freigaben
+SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `LIVE`-Freigabedomäne. Migration älterer Datenbanken markiert jeden Altauftrag als `MOCK`, ein Trigger macht den Scope unveränderlich. Alle vorhandenen Browser-/Simulator-/Offline-Koordinator-Schnittstellen bleiben Mock-exklusiv. Ein produktiver Live-Executor darf nur einen noch zu definierenden, eigenständig authentifizierten Live-Approval-Vertrag und eine gesonderte atomare Claim-/Audit-Kette akzeptieren.
