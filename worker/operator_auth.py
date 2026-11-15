@@ -103,7 +103,7 @@ class OperatorAuthenticator:
             try:
                 candidate = _derive(secret, self._record.salt)
             except OperatorAuthError:
-                candidate = b"\\x00" * _KEY_BYTES
+                candidate = bytes(_KEY_BYTES)
             if not hmac.compare_digest(candidate, self._record.password_hash):
                 self._failures += 1
                 if self._failures >= _MAX_ATTEMPTS:
@@ -111,6 +111,14 @@ class OperatorAuthenticator:
                     self._failures = 0
                 raise OperatorAuthError("operator_authentication_failed")
             self._failures = 0
+            # Bound transient tickets so successful verifications cannot grow
+            # in-memory state without limit.
+            self._tickets = {
+                key: value for key, value in self._tickets.items()
+                if value[0] > now
+            }
+            if len(self._tickets) >= 128:
+                raise OperatorAuthError("too_many_pending_tickets")
             token = secrets.token_urlsafe(32)
             self._tickets[token] = (now + _TICKET_SECONDS, binding)
             return OperatorTicket(token)
