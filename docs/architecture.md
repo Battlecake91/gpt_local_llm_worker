@@ -74,3 +74,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Nicht verdrahtetes LIVE-Journal
 `worker/live_approval.py` definiert `LiveApprovalLedger` in eigener SQLite-Tabelle `live_proposals`, getrennt vom historischen `ssh_batches`-Mock-Katalog. Bereits beim Vorschlag werden exakte Befehlsdaten, Herkunft und eine vollständige Zielidentitäts-Bindung festgeschrieben. `approve()` und `claim_execution()` werfen absichtlich Fehler, kein produktiver SSH-Aufruf kann entstehen. Dies ist lediglich Datenmodell und offline testbarer Sperrvertrag, noch kein Benutzer-Authentifizierungsverfahren oder Hostkey-Nachweis.
+
+### Noch nicht angeschlossene Operator-Verifikation
+`worker/operator_auth.py` implementiert separat scrypt-basierte Passwortverifikation sowie kurzlebige One-Shot-Tickets, strikt an Host-/Command-Digests und Ursprung gebunden. Es wird nicht von `LiveApprovalLedger`, FastAPI, Brave, CLI oder dem SSH-Executor importiert. Die vorhandene `approve()`-Sperre bleibt bestehen. Tests nutzen nur synthetische Passwörter und lokale Funktionsaufrufe.
