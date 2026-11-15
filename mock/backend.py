@@ -97,6 +97,12 @@ class ReviewDecision(BaseModel):
     tab_id: int
 
 
+@app.get('/api/bridge/v1/ssh/mock-results', dependencies=[Depends(require_token)])
+def list_mock_results():
+    store = configured_approval_store()
+    return {"items": [] if store is None else store.recent_mock_results()}
+
+
 @app.get('/api/bridge/v1/ssh/proposals', dependencies=[Depends(require_token)] )
 def list_proposals():
     store = configured_approval_store()
