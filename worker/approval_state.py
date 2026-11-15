@@ -36,6 +36,13 @@ class ApprovalStore:
                     approved_by TEXT
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS mock_execution_results (
+                    request_id TEXT PRIMARY KEY REFERENCES ssh_batches(request_id),
+                    status TEXT NOT NULL CHECK(status IN ('SUCCEEDED','FAILED','UNKNOWN')),
+                    result_json TEXT NOT NULL
+                )
+            """)
 
     @contextmanager
     def _connect(self):
@@ -121,6 +128,33 @@ class ApprovalStore:
             return db.execute(
                 "UPDATE ssh_batches SET status='UNKNOWN' WHERE status='RUNNING'"
             ).rowcount
+
+    def finish_mock_execution(self, request_id: str, approval_id: str, result: dict):
+        """Atomically commit a bounded fixture result; never accept a second result."""
+        if not isinstance(result, dict) or result.get("status") not in ("SUCCEEDED", "FAILED", "UNKNOWN"):
+            raise ApprovalStateError("invalid_mock_result")
+        serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        if len(serialized.encode("utf-8")) > 131_072:
+            raise ApprovalStateError("mock_result_too_large")
+        with self._connect() as db:
+            updated = db.execute(
+                "UPDATE ssh_batches SET status=? WHERE request_id=? AND approval_id=? AND status='RUNNING'",
+                (result["status"], request_id, approval_id)
+            ).rowcount
+            if updated != 1:
+                raise ApprovalStateError("mock_completion_denied")
+            db.execute(
+                "INSERT INTO mock_execution_results(request_id,status,result_json) VALUES (?,?,?)",
+                (request_id, result["status"], serialized)
+            )
+
+    def get_mock_result(self, request_id: str):
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT result_json FROM mock_execution_results WHERE request_id=?",
+                (request_id,)
+            ).fetchone()
+        return None if row is None else json.loads(row[0])
 
     def get(self, request_id: str):
         with self._connect() as db:
