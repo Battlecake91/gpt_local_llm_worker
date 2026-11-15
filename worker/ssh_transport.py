@@ -102,7 +102,9 @@ def ssh_argv(config: SSHHostConfig, known_hosts_path: Path, cwd: str, command: s
 
 
 def _decode(value: bytes) -> str:
-    return value.decode("utf-8", errors="replace")
+    # Ignore incomplete UTF-8 at byte budget boundary. Replacement characters
+    # expand to 3 bytes and could violate the configured output cap.
+    return value.decode("utf-8", errors="ignore")
 
 
 class OpenSSHRunner:
