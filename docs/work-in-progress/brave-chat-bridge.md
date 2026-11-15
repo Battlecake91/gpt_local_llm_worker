@@ -295,3 +295,8 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Zusätzliche Korrektur: parallele stdout/stderr-Reader synchronisieren ihr gemeinsames Bytebudget; unvollständige Reader werden nicht als Erfolg zurückgemeldet. UTF-8-Decoder verwirft abgeschnittene/ungültige Bytefolgen, sodass `errors="replace"` das Bytelimit nicht überschreiten kann. Passender Test ergänzt.
 - Source-Review der zuletzt vom Repository neu geladenen `worker/ssh_transport.py` und `tests/test_ssh_transport.py` erfolgte; **Python-Ausführung nach diesen Commits noch nicht durchgeführt**, insbesondere kein Windows-Test und keine echte Hostkey-Prüfung am Ziel. Erwarteter Windows-Aufruf: `py -m pytest -q tests/test_ssh_transport.py`, danach `py -m pytest -q`.
 - Live-Test weiterhin gesperrt. Der Transport ist keinem Mock- oder Browser-Handler zugeordnet; keine Hostidentitäten, privaten Schlüssel, Credentials oder IP-Adressen des produktiven NAS wurden konfiguriert oder kontaktiert.
+
+## Windows-Test: UTF-8-Fixture-Literal korrigiert (2026-11-15)
+- Windows-Checkout nach Pull bis `ebe9faa`: `py -m pytest -q tests/test_ssh_transport.py` **9 passed, 12 subtests passed, 1 failed**; vollständiger `py -m pytest -q` **57 passed, 22 subtests passed, 1 failed**.
+- Fehler in `tests/test_ssh_transport.py::test_utf8_boundary_never_expands_bounded_output`: Test übergab `b"\\\\xff" * 100` (vier ASCII-Zeichen pro Element, 400 Bytes), statt 100 ungültigen UTF-8-Bytes. `_decode` verhielt sich korrekt, die Längenannahme im Test war falsch.
+- Fix: Fixture auf `bytes([0xff]) * 100` umgestellt. Isolierte direkte Python-Checks der beiden UTF-8-Assertions: **2/2 PASS**. Volle Windows-Regression nach Fix noch offen; keine Produktivcodeänderung, keine SSH-Verbindung.
