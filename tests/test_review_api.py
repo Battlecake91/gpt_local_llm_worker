@@ -110,6 +110,32 @@ class ReviewAPITests(unittest.TestCase):
         self.assertEqual(self.capture(json.dumps(tampered), "another").status_code, 409)
         self.assertEqual(self.pending().json()["items"][0]["commands"][0]["command"], "uname -a")
 
+    def test_mock_result_history_is_authenticated_read_only(self):
+        from mock.backend import configured_approval_store
+        self.assertEqual(self.client.get("/api/bridge/v1/ssh/mock-results").status_code, 401)
+        self.assertEqual(self.client.get("/api/bridge/v1/ssh/mock-results",
+                                         headers=self.headers).json()["items"], [])
+        self.capture(ssh_text())
+        proposal = self.pending().json()["items"][0]
+        approval = self.client.post(
+            "/api/bridge/v1/ssh/proposals/review-1/approve",
+            json=self.decision(proposal), headers=self.headers)
+        self.assertEqual(approval.status_code, 200)
+        store = configured_approval_store()
+        state = store.get("review-1")
+        store.claim_execution("review-1", state["approval_id"])
+        store.finish_mock_execution("review-1", state["approval_id"], {
+            "mode": "MOCK_ONLY", "status": "SUCCEEDED",
+            "commands": [{"id": "sys", "stdout": "MOCK ONLY"}]})
+        response = self.client.get("/api/bridge/v1/ssh/mock-results", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        self.assertEqual(item["request_id"], "review-1")
+        self.assertEqual(item["conversation_id"], "chat-1")
+        self.assertEqual(item["result"]["commands"][0]["stdout"], "MOCK ONLY")
+        self.assertEqual(store.get("review-1")["status"], "SUCCEEDED")
+        self.assertEqual(db.outbound, {})
+
     def test_review_disabled_by_default(self):
         with patch.dict(os.environ, {"BRIDGE_APPROVAL_DB": "", "BRIDGE_ALLOWED_HOSTS": ""}):
             self.assertEqual(self.pending().json()["items"], [])
