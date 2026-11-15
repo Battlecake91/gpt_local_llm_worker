@@ -64,3 +64,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Persistente Login-Sperre
 `worker/operator_rate_limit.py` ergänzt einen ausschließlich lokalen, SQLite-basierten Verifikations-Wrapper. Nach fünf falschen Passworteingaben bleibt eine 60-Sekunden-Sperre auch bei einem Worker-Neustart erhalten. Der Wrapper besitzt **keinen** Login-Endpunkt, und keine SSH-Ausführung wird freigegeben. Tests: `py -m pytest -q tests/test_operator_rate_limit.py`.
+
+### Offline-Betreiberanmeldung mit persistenter Sperre
+`worker/trusted_operator_flow.py` stellt die lokalen Credential-, Rate-Limit- und LIVE-Audit-Komponenten zu einer fail-closed Offline-Freigabe zusammen. Keine UI oder API schaltet echte SSH-Befehle frei. Vertragstest: `py -m pytest -q tests/test_trusted_operator_flow.py`.
