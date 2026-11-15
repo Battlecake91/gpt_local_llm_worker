@@ -47,3 +47,7 @@ Der `command_sha256` wird gebildet aus kanonischem UTF-8-JSON (mit sortierten Sc
 `worker/approval_state.py` legt diese Aufträge in SQLite als `PROPOSED` ab, verhindert `request_id`-Kollisionen, erlaubt eine spätere explizite Einmalfreigabe **nur** mit exakt passendem Digest, und hält `RUNNING` über den Transaktionsabschluss vor jedem möglichen Ausführungsstart fest. Nach Neustart kann `RUNNING` zu `UNKNOWN` überführt werden, niemals automatisch erneut zu `RUNNING`.
 
 **Noch nicht implementiert:** authentifizierte operatorseitige Freigabe-UI, produktiver API-Endpunkt, SSH-Executor, Hostkey-Pinning, Ausgabelimits, vollständiger Audit-Log und tatsächliche resultierende Browser-Auto-Send-Integration. Die Klasse `ApprovalStore.approve()` setzt voraus, dass ihr Aufrufer zuvor eine menschliche, authentifizierte Aktion geprüft hat; sie führt diese Prüfung nicht selbst durch.
+
+### SSH-Transportstatus (2026-11-15)
+
+Ein eigenständiger OpenSSH-Adapter erzeugt argv-Aufrufe mit isoliertem Hostkey-Pin, nichtinteraktiver Anmeldung und realer Prozess-Timeout-Grenze. **Er ist nicht mit dem Protokoll-Parser, dem Freigabe-Store oder der Brave-API verbunden.** Ein gültiger `kind:"ssh_batch"`-Auftrag oder eine Mock-Freigabe lösen daher nach wie vor **keine reale SSH-Verbindung** aus.
