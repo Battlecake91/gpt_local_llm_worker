@@ -253,3 +253,12 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Tests ergänzt: `tests/test_approval_state.py` (SQLite-Historie nach Neustart), `tests/test_review_api.py` (401 ohne Token, read-only GET mit Originalbindung), `tests/test_background.cjs` (Content-Script verweigert; Panel erlaubt Abfrage).
 - Gezielt ausgeführt: V8-JS-Syntaxcheck der GitHub-Fassungen von `background.js`, `panel.js`, `test_background.cjs` **3/3 PASS**. Vollständige `node --test tests/*.cjs`-/`py -m pytest -q`-Läufe der **neuen Änderungen** sowie Live-Prüfung des Panels noch offen. Container kann GitHub wegen DNS-Ausfall nicht klonen.
 - Bedienung: Repo aktualisieren, Mock-Server und Brave-Erweiterung neu laden, im Panel **Simulierte SSH-Ergebnisse → Gespeicherte Ergebnisse anzeigen → Ergebnisse aktualisieren**; alten Erfolg `review-498c...` suchen.
+
+## Windows-Abnahme Mock-Resultate und gezielter Testfix (2026-11-15)
+
+- Benutzer `git pull` bis `ae87fcd` erfolgreich.
+- `node --test tests/*.cjs`: **57/58 PASS**, einzig `mock history retrieval is restricted to the extension sidepanel` scheiterte bei `tests/test_background.cjs:155` mit `1 !== 0` beim Vergleich von `h.calls.length` vor/nach einer untrusted Anfrage.
+- Ursache: Der MV3-Harness führt beim Start selbst einen asynchronen `/outbound`-Synchronisierungslauf aus. Der Test setzte seine Baseline unmittelbar nach `harness()` auf `0` und zählte den späteren, **unabhängigen** Startup-HTTP-Call fälschlich als Zugriff des ChatGPT-Content-Scripts. Die eigentliche Berechtigungsprüfung im Background war erfolgreich (`untrusted_review_sender`).
+- Fix: Baseline und Nachprüfung zählen nur `/ssh/mock-results`-Requests, damit keine fremden Startup-/Capture-Calls das Ergebnis beeinflussen. Produktiver Background-Code unverändert; nur `tests/test_background.cjs` angepasst.
+- `py -m pytest -q`: **48 passed, 10 subtests passed**, 1.23 s. Keine Python-Korrektur erforderlich.
+- Nach Fix kompletter Node-Testlauf auf Windows **noch offen**; keine Behauptung über 58/58 ohne erneuten Lauf.
