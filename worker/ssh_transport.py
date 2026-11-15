@@ -119,6 +119,7 @@ class OpenSSHRunner:
                                    shell=False)
         buffers = [bytearray(), bytearray()]
         overflow = threading.Event()
+        output_lock = threading.Lock()
 
         def consume(stream, index):
             try:
@@ -126,13 +127,19 @@ class OpenSSHRunner:
                     chunk = stream.read(4096)
                     if not chunk:
                         break
-                    # Bound combined bytes, including both streams.
-                    left = max_output_bytes - sum(len(buf) for buf in buffers)
-                    if left > 0:
-                        buffers[index].extend(chunk[:left])
-                    if len(chunk) > left:
-                        overflow.set()
-                        process.kill()
+                    # Protect the combined byte budget across both reader threads.
+                    with output_lock:
+                        left = max_output_bytes - sum(len(buf) for buf in buffers)
+                        if left > 0:
+                            buffers[index].extend(chunk[:left])
+                        exceeded = len(chunk) > left
+                        if exceeded:
+                            overflow.set()
+                    if exceeded:
+                        try:
+                            process.kill()
+                        except ProcessLookupError:
+                            pass
                         break
             finally:
                 stream.close()
@@ -150,6 +157,9 @@ class OpenSSHRunner:
             process.wait()
         for reader in readers:
             reader.join(timeout=2)
+        if any(reader.is_alive() for reader in readers):
+            # Unknown state is safer than returning incomplete output as success.
+            raise SSHTransportError("ssh_output_reader_incomplete")
         return SSHRunResult(
             None if timed_out else process.returncode,
             _decode(bytes(buffers[0])), _decode(bytes(buffers[1])),
