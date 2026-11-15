@@ -100,7 +100,9 @@ class ReviewDecision(BaseModel):
 @app.get('/api/bridge/v1/ssh/mock-results', dependencies=[Depends(require_token)])
 def list_mock_results():
     store = configured_approval_store()
-    return {"items": [] if store is None else store.recent_mock_results()}
+    if store is None:
+        raise HTTPException(503, "Mock approval database is not configured; restart with -ReviewHosts")
+    return {"items": store.recent_mock_results()}
 
 
 @app.get('/api/bridge/v1/ssh/proposals', dependencies=[Depends(require_token)] )
