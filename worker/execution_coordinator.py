@@ -5,7 +5,6 @@ refuses any transport other than an explicitly provided test double.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from typing import Protocol
