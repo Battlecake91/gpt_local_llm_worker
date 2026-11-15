@@ -1,6 +1,9 @@
 """Strictly offline transport contract tests; fake runner never spawns ssh."""
 import base64
+import io
+import subprocess
 import tempfile
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -53,7 +56,8 @@ class SSHTransportTests(unittest.TestCase):
         self.assertEqual(budget, 16384)
         self.assertEqual(runner.known_hosts_content,
                          "[test.example.invalid]:2222 " + self.key + "\n")
-        self.assertFalse(any(self.folder.glob("gpt-ssh-pin-*")))
+        pin_arg = next(arg for arg in argv if arg.startswith("UserKnownHostsFile="))
+        self.assertFalse(Path(pin_arg.split("=", 1)[1]).exists())
 
     def test_default_port_known_hosts_record(self):
         cfg = SSHHostConfig("isolated-test", "test.example.invalid", "testuser", 22,
@@ -98,6 +102,53 @@ class SSHTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(SSHTransportError, "invalid_port"):
             SSHHostConfig("isolated-test", "test.example.invalid", "testuser", 0,
                           self.identity, self.key)
+
+    def test_runner_enforces_output_byte_limit_with_fake_process(self):
+        class FakeProcess:
+            def __init__(self):
+                self.stdout = io.BytesIO(b"A" * 8192)
+                self.stderr = io.BytesIO(b"B" * 8192)
+                self.returncode = 0
+                self.killed = False
+
+            def wait(self, timeout=None):
+                if self.killed:
+                    self.returncode = -9
+                return self.returncode
+
+            def kill(self):
+                self.killed = True
+
+        fake = FakeProcess()
+        with patch("worker.ssh_transport.subprocess.Popen", return_value=fake):
+            result = OpenSSHRunner().run(["ssh", "FAKE ONLY"], 5, 1024)
+        self.assertTrue(result.truncated)
+        self.assertLessEqual(len(result.stdout.encode()) + len(result.stderr.encode()), 1024)
+        self.assertTrue(fake.killed)
+
+    def test_runner_marks_actual_wait_timeout_with_fake_process(self):
+        class FakeProcess:
+            def __init__(self):
+                self.stdout = io.BytesIO(b"")
+                self.stderr = io.BytesIO(b"")
+                self.returncode = None
+                self.killed = False
+
+            def wait(self, timeout=None):
+                if not self.killed:
+                    raise subprocess.TimeoutExpired("ssh", timeout)
+                self.returncode = -9
+                return self.returncode
+
+            def kill(self):
+                self.killed = True
+
+        fake = FakeProcess()
+        with patch("worker.ssh_transport.subprocess.Popen", return_value=fake):
+            result = OpenSSHRunner().run(["ssh", "FAKE ONLY"], 1, 1024)
+        self.assertTrue(result.timed_out)
+        self.assertIsNone(result.exit_code)
+        self.assertTrue(fake.killed)
 
     def test_runner_rejects_bad_limits_without_spawning(self):
         runner = OpenSSHRunner()
