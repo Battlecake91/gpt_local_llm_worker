@@ -34,3 +34,7 @@ See [installation and mock smoke test](INSTALL.md), [bridge API contract](docs/b
 ## SSH-Review im Brave-Panel (nur Mock)
 
 Das Seitenpanel enthält inzwischen einen eingeklappten Bereich für vollständige SSH-Auftragsvorschläge. Ein aktivierter Mock-Worker kann streng validierte `kind:"ssh_batch"`-Antworten mit konfigurierter Host-Allowlist in SQLite als `PROPOSED` speichern. Bestätigung und Ablehnung erfolgen nur per Panel-Aktion und werden vom Backend anhand Origin und Approval-Digest geprüft. **Dies ist keine produktive SSH-Freigabe:** Weder Executor noch automatische ChatGPT-Übertragung werden durch `APPROVED_FOR_MOCK_REVIEW` aktiviert. Anleitung: [INSTALL.md](INSTALL.md#mock-ssh-aufträge-im-seitenpanel-prüfen-ohne-ausführung).
+
+## Offline SSH Fixture-Simulation
+
+Unter `worker/mock_executor.py` liegt ein ausdrücklich nicht-netzwerkfähiger Executor für bereits genehmigte Testaufträge. Er validiert den kompletten gespeicherten Befehls-Digest erneut, erzeugt nur statische `MOCK ONLY`-Ausgaben, setzt Timeouts lediglich als Testkennzeichen, begrenzt UTF-8-Output und verhindert Wiederausführung nach Erfolg/Fehler/Absturz. Kein SSH-Client, keine realen Befehle, kein Auto-Send. Siehe [Windows-Demo](INSTALL.md#bereits-freigegebenen-ssh-auftrag-offline-simulieren) und `tests/test_mock_executor.py`.
