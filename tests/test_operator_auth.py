@@ -2,7 +2,7 @@
 import unittest
 
 from worker.operator_auth import (
-    OperatorAuthenticator, OperatorAuthError, OperatorTicket, create_password_record,
+    OperatorAuthenticator, OperatorAuthError, OperatorPasswordRecord, OperatorTicket, create_password_record,
 )
 
 
@@ -23,6 +23,12 @@ class OperatorAuthTests(unittest.TestCase):
         self.assertEqual(self.auth.consume_for_proposal(ticket, **self.binding), "local-operator")
         with self.assertRaisesRegex(OperatorAuthError, "ticket_missing_or_used"):
             self.auth.consume_for_proposal(ticket, **self.binding)
+
+    def test_malformed_credential_record_denied(self):
+        with self.assertRaisesRegex(OperatorAuthError, "invalid_credential_record"):
+            OperatorPasswordRecord("local-operator", "x" * 16, b"x" * 32)
+        with self.assertRaisesRegex(OperatorAuthError, "invalid_credential_record"):
+            OperatorPasswordRecord("local-operator", b"x" * 16, "x" * 32)
 
     def test_wrong_password_fails_without_ticket(self):
         with self.assertRaisesRegex(OperatorAuthError, "operator_authentication_failed"):
