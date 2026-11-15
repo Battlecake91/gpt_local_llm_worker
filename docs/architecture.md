@@ -71,3 +71,6 @@ The isolated mock backend now exposes authenticated `GET /api/bridge/v1/ssh/mock
 
 ### Provenienz von Freigaben
 SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `LIVE`-Freigabedomäne. Migration älterer Datenbanken markiert jeden Altauftrag als `MOCK`, ein Trigger macht den Scope unveränderlich. Alle vorhandenen Browser-/Simulator-/Offline-Koordinator-Schnittstellen bleiben Mock-exklusiv. Ein produktiver Live-Executor darf nur einen noch zu definierenden, eigenständig authentifizierten Live-Approval-Vertrag und eine gesonderte atomare Claim-/Audit-Kette akzeptieren.
+
+### Nicht verdrahtetes LIVE-Journal
+`worker/live_approval.py` definiert `LiveApprovalLedger` in eigener SQLite-Tabelle `live_proposals`, getrennt vom historischen `ssh_batches`-Mock-Katalog. Bereits beim Vorschlag werden exakte Befehlsdaten, Herkunft und eine vollständige Zielidentitäts-Bindung festgeschrieben. `approve()` und `claim_execution()` werfen absichtlich Fehler, kein produktiver SSH-Aufruf kann entstehen. Dies ist lediglich Datenmodell und offline testbarer Sperrvertrag, noch kein Benutzer-Authentifizierungsverfahren oder Hostkey-Nachweis.
