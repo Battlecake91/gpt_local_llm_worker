@@ -67,3 +67,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Offline-Betreiberanmeldung mit persistenter Sperre
 `worker/trusted_operator_flow.py` stellt die lokalen Credential-, Rate-Limit- und LIVE-Audit-Komponenten zu einer fail-closed Offline-Freigabe zusammen. Keine UI oder API schaltet echte SSH-Befehle frei. Vertragstest: `py -m pytest -q tests/test_trusted_operator_flow.py`.
+
+### Lokaler LIVE-Freigabedialog (vorbereitet, keine SSH-Ausführung)
+`worker/operator_review.py` kontrolliert, dass der Betreiber alle Befehle mit ihrem genauen Inhalt, den vollständigen SSH-Zielinformationen und den Ursprungschat prüfen kann. Ein separat startbares `worker/operator_review_gui.py` enthält einen lokalen Tkinter-Prüfdialog (Checkbox und Passwort). Er benötigt bereits vorhandene LIVE-Vorschläge, Betreiber-Credentials, Rate-Limit-DB und eine explizite lokal verwaltete Host-Allowlist; es gibt noch keinen Enrollment-/Vorschlagsimport-Weg für den Produktiveinsatz. **Keine Brave-/HTTP-Verbindung, keine SSH-Ausführung und kein Auto-Send.** Headless-Tests: `py -m pytest -q tests/test_operator_review.py tests/test_operator_review_gui.py`.
