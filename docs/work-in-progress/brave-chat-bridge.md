@@ -229,3 +229,19 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Windows-Fixture `windows-brave-review.ps1` meldete `Mock SSH proposal submitted: review-498c904027c04f54beecb5c87cb7b9f3`. Benutzer meldete anschließend zur Brave-Freigabeoberfläche: **„Scheint zu funktionieren“**.
 - Damit ist die grundlegende Anzeige/Bedienbarkeit des Mock-Review-Pfads **vorläufig durch den Benutzer bestätigt**. Die genaue Backend-Antwort `APPROVED_FOR_MOCK_REVIEW`, vollständige Ablehnungs-/Manipulationsfälle und Neustart des UI wurden vom Benutzer nicht gesondert protokolliert; daher keine vollständige E2E-Sicherheitsfreigabe behaupten.
 - Nächster Arbeitsblock: separater simuliert ausführender SSH-Executor mit konfiguriertem Host-/Benutzer-/Hostkey-Vertrag, Timeouts und Ausgabelimits; zunächst keine echten SSH-Verbindungen oder automatischen ChatGPT-Sendungen.
+
+## Simulierter SSH-Executor ohne Netzwerk (2026-11-15)
+
+**Branch:** `feature/brave-chat-bridge`. Keine produktive SSH-Verbindung, kein automatisches ChatGPT-Senden.
+
+**Implementierung:**
+- `worker/mock_executor.py`: ausdrücklicher `MockSSHExecutor` ohne SSH-, Socket- oder Subprocess-Import. Hostalias, Mock-Benutzer und syntaktischer Hostkey-Platzhalter sind konfiguriert, aber **keine realen SSH-Credentials oder kryptografische Hostkey-Prüfung**. Frisch berechneter Digest prüft die komplette persistierte Proposal-Payload unmittelbar vor dem Claim. Eine pro Kommando-ID fest vorgegebene `FixtureReply` enthält stdout, stderr, Exitcode und simuliertes Timeoutflag. Bei Nichtnull-Exit, Timeout oder Output-Trunkierung werden weitere Befehle nicht simuliert. UTF-8-sicheres Ausgabelimit 16 KiB je Batch.
+- `worker/approval_state.py`: Tabelle `mock_execution_results`; `finish_mock_execution` speichert terminalen Zustand und Ergebnis in **einer SQLite-Transaktion** und verweigert erneute Ergebnisse. `recover_unknown`/einmaliges `APPROVED → RUNNING` bleiben bestehen.
+- `worker/mock_cli.py`: **ausschließlich** bewusst gestartete Mock-Simulation eines bereits freigegebenen Batches. Ergebnistext jedes Kommandos ausdrücklich `MOCK ONLY`, keine Ausführung des Befehlstexts. Kein API-Endpoint startet diesen Simulator autonom.
+- `scripts/windows-brave-simulate.ps1`: Windows-Wrapper für die lokale SQLite-Mock-Datenbank unter `%LOCALAPPDATA%\gpt-local-llm-worker\mock-review.sqlite3`; verlangt vorhandene virtuelle Python-Umgebung und Auftrags-ID.
+- `tests/test_mock_executor.py`: Tests für Erfolg, terminalen Status, Blockabbruch bei Exitfehler/Timeout/Trunkierung, UTF-8-Grenze, fehlende und falsche Approval-/Host-Bindung, Datenbank-Manipulation, Crash/UNKNOWN, Replay-Sperre, explizite CLI-Nutzung und Hostkonfiguration.
+- `INSTALL.md`, `README.md`, `docs/security.md`, `docs/architecture.md` angepasst.
+
+**Wichtige Grenzen:** Das Timeout ist **ein Fixture-Flag**, keine wirkliche Zeitüberwachung; der Mock-Hostkey ist **kein** verifizierter SSH-Fingerabdruck; kein Kommando wird ausgeführt, kein SSH-Transport importiert und kein ChatGPT-Auto-Send angestoßen. Für Produktion fehlen tatsächliche Authentifizierung/SSH-Pinning/Real-Timeouts/Redaction/Result-Routing.
+
+**Tests:** Windows-Nachprüfung für die neu hinzugefügten Python-Module ist noch offen. Der vorherige Benutzerstand `25 passed, 10 subtests passed` stammt **vor** dieser Änderung. Nach Pull `py -m pytest -q tests/test_mock_executor.py tests/test_approval_state.py`, danach optional vollständige `py -m pytest -q`. Keine Zahl für neue Tests behaupten, bevor sie ausgeführt wurden.
