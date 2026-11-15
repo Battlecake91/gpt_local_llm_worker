@@ -2,6 +2,7 @@
 import json
 import sqlite3
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -101,6 +102,19 @@ class OfflineLiveGateTests(unittest.TestCase):
         self.assertEqual(self.gate.audit_for("live-fixture-1"), [])
         with self.assertRaisesRegex(OperatorAuthError, "ticket_missing_or_used"):
             self.gate.approve_with_ticket("live-fixture-1", ticket)
+
+    def test_concurrent_tickets_can_approve_only_once(self):
+        first, second = self.ticket(), self.ticket()
+        def attempt(ticket):
+            try:
+                return ("ok", self.gate.approve_with_ticket("live-fixture-1", ticket))
+            except LiveAuthorizationError as exc:
+                return ("denied", str(exc))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(attempt, (first, second)))
+        self.assertEqual(sorted(outcome[0] for outcome in outcomes), ["denied", "ok"])
+        self.assertEqual(len(self.gate.audit_for("live-fixture-1")), 1)
+        self.assertEqual(self.ledger.get("live-fixture-1")["status"], "APPROVED")
 
     def test_audit_rows_cannot_be_mutated_or_deleted(self):
         self.gate.approve_with_ticket("live-fixture-1", self.ticket())
