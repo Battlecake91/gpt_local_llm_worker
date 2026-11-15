@@ -134,6 +134,21 @@ class MockExecutorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mock_host_alias_mismatch"):
             MockSSHExecutor(self.store, {"wrong": MockHost("lab-nas", "mockuser", HOST_PIN)})
 
+    def test_mock_cli_consumes_approval_but_does_not_invoke_any_real_command(self):
+        from worker.mock_cli import simulate
+        result = simulate(self.path, "job-1", "lab-nas")
+        self.assertEqual(result["mode"], "MOCK_ONLY")
+        self.assertEqual(len(result["commands"]), 2)
+        self.assertTrue(all("MOCK ONLY" in x["stdout"] for x in result["commands"]))
+        with self.assertRaisesRegex(ApprovalStateError, "no_approved_mock_proposal"):
+            simulate(self.path, "job-1", "lab-nas")
+
+    def test_mock_cli_rejects_wrong_host_without_consuming_approval(self):
+        from worker.mock_cli import simulate
+        with self.assertRaisesRegex(ApprovalStateError, "host_not_selected_for_mock"):
+            simulate(self.path, "job-1", "different")
+        self.assertEqual(self.store.get("job-1")["status"], "APPROVED")
+
     def test_tampered_stored_command_cannot_run_under_old_digest(self):
         with self.store._connect() as db:
             row = db.execute(
