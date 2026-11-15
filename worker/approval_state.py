@@ -47,6 +47,16 @@ class ApprovalStore:
                     "NOT NULL DEFAULT 'MOCK' "
                     "CHECK (approval_scope IN ('MOCK', 'LIVE'))"
                 )
+            # Scope is provenance, not an editable status. In particular a
+            # historical mock approval may never be promoted to LIVE.
+            db.execute("""
+                CREATE TRIGGER IF NOT EXISTS ssh_batches_scope_immutable
+                BEFORE UPDATE OF approval_scope ON ssh_batches
+                WHEN NEW.approval_scope != OLD.approval_scope
+                BEGIN
+                    SELECT RAISE(ABORT, 'approval_scope_immutable');
+                END
+            """)
             db.execute("""
                 CREATE TABLE IF NOT EXISTS mock_execution_results (
                     request_id TEXT PRIMARY KEY REFERENCES ssh_batches(request_id),
@@ -143,7 +153,7 @@ class ApprovalStore:
         """On startup, unresolved RUNNING batches require manual reconciliation."""
         with self._connect() as db:
             return db.execute(
-                "UPDATE ssh_batches SET status='UNKNOWN' WHERE status='RUNNING'"
+                "UPDATE ssh_batches SET status='UNKNOWN' WHERE status='RUNNING' AND approval_scope='MOCK'"
             ).rowcount
 
     def finish_mock_execution(self, request_id: str, approval_id: str, result: dict):
@@ -186,7 +196,9 @@ class ApprovalStore:
     def get_mock_result(self, request_id: str):
         with self._connect() as db:
             row = db.execute(
-                "SELECT result_json FROM mock_execution_results WHERE request_id=?",
+                "SELECT r.result_json FROM mock_execution_results AS r "
+                "JOIN ssh_batches AS b ON b.request_id=r.request_id "
+                "WHERE r.request_id=? AND b.approval_scope='MOCK'",
                 (request_id,)
             ).fetchone()
         return None if row is None else json.loads(row[0])
