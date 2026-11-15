@@ -61,3 +61,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Betreiber-Zugangsdaten dauerhaft ablegen (Offline-Baustein)
 `worker/operator_credentials.py` hält einen gesalzenen Passwortverifikator dauerhaft vor, ohne Klartextpasswort. Windows nutzt benutzergebundene DPAPI-Verschlüsselung, Linux private Dateirechte. Es gibt bewusst **noch keinen** Installations- oder Anmelde-Endpunkt; auch diese Ablage aktiviert keinen LIVE-SSH. Isolierte Tests: `py -m pytest -q tests/test_operator_credentials.py`.
+
+### Persistente Login-Sperre
+`worker/operator_rate_limit.py` ergänzt einen ausschließlich lokalen, SQLite-basierten Verifikations-Wrapper. Nach fünf falschen Passworteingaben bleibt eine 60-Sekunden-Sperre auch bei einem Worker-Neustart erhalten. Der Wrapper besitzt **keinen** Login-Endpunkt, und keine SSH-Ausführung wird freigegeben. Tests: `py -m pytest -q tests/test_operator_rate_limit.py`.
