@@ -13,7 +13,6 @@ import shlex
 import subprocess
 import tempfile
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
