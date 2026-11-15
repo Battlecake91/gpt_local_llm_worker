@@ -52,3 +52,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### LIVE-Freigabedomäne (weiterhin deaktiviert)
 `worker/live_approval.py` führt ein unabhängiges, unveränderliches LIVE-Vorschlagsjournal ein. Es ist an keine UI, API oder CLI angeschlossen; `approve` und `claim_execution` sind bewusst gesperrt. Die bisherigen `MOCK`-Freigaben werden nicht übernommen. Offline-Vertragstests: `py -m pytest -q tests/test_live_approval.py`.
+
+### Betreiber-Authentifizierung (Offline-Vertrag)
+`worker/operator_auth.py` enthält eine isolierte scrypt-Passwortprüfung mit kurzlebigen, nur einmal verwendbaren und auf Auftrag/Ziel/Chat gebundenen Tickets. **Nicht angeschlossen** an UI, API oder LIVE-Approval; keine echten SSH-Verbindungen. Tests: `py -m pytest -q tests/test_operator_auth.py`.
