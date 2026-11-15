@@ -127,3 +127,25 @@ py -m pytest -q
 ```
 
 Bekannte Einschränkung: Ein produktiver Freigabedialog muss zusätzlich den **tatsächlich konfigurierten SSH-Benutzer** und relevante Nebenwirkungen aus vertrauenswürdiger Host-Konfiguration anzeigen. Die Mock-Oberfläche hat bewusst noch keine echte SSH-Benutzer-/Hostkey-Konfiguration und ist daher **nicht für produktive Freigaben geeignet**.
+
+## Bereits freigegebenen SSH-Auftrag offline simulieren
+
+Diese Stufe nimmt **keine** SSH-Verbindung auf und ruft weder Shell noch externe Prozesse für die gespeicherten Befehle auf. Sie schreibt ausschließlich explizit als `MOCK ONLY` gekennzeichnete Fixture-Antworten in die vorhandene Freigabe-SQLite-Datenbank. Es gibt **keine** Weiterleitung der Ausgabe an ChatGPT.
+
+Nach der Freigabe eines neuen Testauftrags im Brave-Seitenpanel in einem zweiten PowerShell-Fenster:
+
+```powershell
+cd C:\Users\steve\Projekte\NEUE_STRUKTUR\Software\gpt_local_llm_worker
+.\scripts\windows-brave-simulate.ps1 -RequestId 'review-498c904027c04f54beecb5c87cb7b9f3' -HostId 'lab-nas'
+```
+
+Die gezeigte Request-ID stammt aus dem vorherigen Live-Test; sie kann nur einmal simuliert werden, **sofern sie bereits erfolgreich bestätigt wurde** und sich noch im Status `APPROVED` befindet. Andernfalls über `windows-brave-review.ps1` einen neuen Vorschlag erzeugen und explizit freigeben.
+
+Der Simulator prüft Alias, hinterlegte Freigabe, vollständigen gespeicherten Befehls-Digest und die Liste der vorbereiteten Fixture-Reaktionen erneut. Vor der simulierten Bearbeitung erfolgt atomar `APPROVED → RUNNING`. Nach Abschluss werden `SUCCEEDED`/`FAILED` und das begrenzte Ergebnis dauerhaft gespeichert. Ein Neustart zwischen diesen Schritten führt zu `UNKNOWN`, nicht zu einem automatischen zweiten Versuch.
+
+**Keine echte Timeout-Messung:** `timed_out` ist bei diesem Fixture-Simulator ein Testwert. Der Eintrag `pinned_host_key` ist eine syntaktische Platzhalter-Kennung, **keine echte Hostkey-Validierung**. Keine produktive Freigabe, kein Netzverkehr und kein Auto-Send.
+
+Neu hinzugefügte Tests:
+```powershell
+py -m pytest -q tests/test_mock_executor.py tests/test_approval_state.py
+```
