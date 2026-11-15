@@ -262,3 +262,8 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Fix: Baseline und Nachprüfung zählen nur `/ssh/mock-results`-Requests, damit keine fremden Startup-/Capture-Calls das Ergebnis beeinflussen. Produktiver Background-Code unverändert; nur `tests/test_background.cjs` angepasst.
 - `py -m pytest -q`: **48 passed, 10 subtests passed**, 1.23 s. Keine Python-Korrektur erforderlich.
 - Nach Fix kompletter Node-Testlauf auf Windows **noch offen**; keine Behauptung über 58/58 ohne erneuten Lauf.
+
+## Windows-Abnahme nach Testfix (2026-11-15)
+- Benutzer führte `node --test tests/*.cjs` nach `520f8ef` erfolgreich aus: **58 Tests, 58 PASS, 0 FAIL, 0 SKIP**, 686.6183 ms. Auch `mock history retrieval is restricted to the extension sidepanel` ist PASS.
+- Letzter übermittelter vollständiger Python-Lauf: `py -m pytest -q` → **48 passed, 10 subtests passed**, 1.23 s.
+- Damit sind die automatisierten JS-/Python-Suites im Windows-Checkout grün. Noch offen bleibt **Live-UI-Abnahme** für den neuen eingeklappten Abschnitt `Simulierte SSH-Ergebnisse` mit dem bereits persistierten erfolgreichen Mock-Auftrag `review-498c904027c04f54beecb5c87cb7b9f3` nach Neustart des Mock-Servers und Reload der Erweiterung. Keine echte SSH-Verbindung oder Auto-Send-Freigabe daraus ableiten.
