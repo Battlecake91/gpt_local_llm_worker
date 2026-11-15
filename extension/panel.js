@@ -126,3 +126,41 @@ byId('ssh-refresh').addEventListener('click',refreshSSH);
 byId('ssh-review').addEventListener('toggle',()=>{
   if(byId('ssh-review').open)refreshSSH();
 });
+
+async function refreshMockResults(){
+  const status=byId('mock-results-status'),container=byId('mock-results-list');
+  status.textContent='Lade gespeicherte Mock-Ergebnisse ...';
+  container.replaceChildren();
+  try{
+    const reply=await chrome.runtime.sendMessage({type:'LIST_MOCK_RESULTS'});
+    if(!reply?.ok)throw Error(reply?.error||'unbekannt');
+    const items=Array.isArray(reply.items)?reply.items:[];
+    status.textContent=items.length+' gespeicherte Mock-Ergebnisse';
+    for(const item of items){
+      if(!item || !item.result || item.result.mode!=='MOCK_ONLY' ||
+         !Array.isArray(item.result.commands))continue;
+      const section=sshNode('section');section.className='ssh-proposal';
+      const details=sshNode('details');
+      details.append(sshNode('summary',item.request_id+' | '+item.status+' | '+item.host_id));
+      details.append(sshNode('p','Originalchat: '+item.conversation_id+' | Tab: '+item.tab_id));
+      details.append(sshNode('p','Mock-Benutzer: '+item.result.username));
+      details.append(sshNode('p','Simulierter Status: '+item.result.status));
+      for(const command of item.result.commands){
+        const entry=sshNode('section');
+        entry.append(sshNode('strong','Befehl-ID: '+command.id+
+          ' | Exitcode: '+String(command.exit_code)+
+          ' | Timeout: '+String(command.timed_out)+
+          ' | Ausgabe gekürzt: '+String(command.truncated)));
+        entry.append(sshNode('pre','STDOUT:\n'+String(command.stdout||'')+
+          '\nSTDERR:\n'+String(command.stderr||'')));
+        details.append(entry);
+      }
+      section.append(details);
+      container.append(section);
+    }
+  }catch(err){status.textContent='Fehler: '+String(err);}
+}
+byId('mock-results-refresh').addEventListener('click',refreshMockResults);
+byId('mock-results-details').addEventListener('toggle',()=>{
+  if(byId('mock-results-details').open)refreshMockResults();
+});
