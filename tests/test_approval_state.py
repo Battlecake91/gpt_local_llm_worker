@@ -89,8 +89,11 @@ class ApprovalStateTests(unittest.TestCase):
                 db.execute(
                     "UPDATE ssh_batches SET approval_scope='LIVE' WHERE request_id='legacy-approved'"
                 )
-        with self.assertRaisesRegex(ApprovalStateError, "request_id_collision"):
-            upgraded.propose(self.request, tab_id=7, conversation_id="chat-abc")
+        self.assertEqual(
+            upgraded.propose(batch(request_id="legacy-approved"),
+                             tab_id=7, conversation_id="chat-abc"),
+            "legacy-approved")
+        self.assertEqual(upgraded.get("legacy-approved")["approval_scope"], "MOCK")
 
     def test_approval_is_for_exact_complete_command_block(self):
         with self.assertRaisesRegex(ApprovalStateError, "approval_denied"):
