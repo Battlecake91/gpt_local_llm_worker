@@ -55,3 +55,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Betreiber-Authentifizierung (Offline-Vertrag)
 `worker/operator_auth.py` enthält eine isolierte scrypt-Passwortprüfung mit kurzlebigen, nur einmal verwendbaren und auf Auftrag/Ziel/Chat gebundenen Tickets. **Nicht angeschlossen** an UI, API oder LIVE-Approval; keine echten SSH-Verbindungen. Tests: `py -m pytest -q tests/test_operator_auth.py`.
+
+### Offline LIVE-Freigabe mit Audit
+`worker/offline_live_gate.py` verbindet Betreiber-Einmaltickets mit dem separaten LIVE-Journal und schreibt Freigabe plus Audit atomar in SQLite. Nur direkter Offline-Python-Bibliotheksaufruf, keine API/CLI-/Brave-Verbindung und ausdrücklich **keine SSH-Ausführung**. Test: `py -m pytest -q tests/test_offline_live_gate.py`.
