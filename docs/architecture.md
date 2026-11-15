@@ -77,3 +77,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Noch nicht angeschlossene Operator-Verifikation
 `worker/operator_auth.py` implementiert separat scrypt-basierte Passwortverifikation sowie kurzlebige One-Shot-Tickets, strikt an Host-/Command-Digests und Ursprung gebunden. Es wird nicht von `LiveApprovalLedger`, FastAPI, Brave, CLI oder dem SSH-Executor importiert. Die vorhandene `approve()`-Sperre bleibt bestehen. Tests nutzen nur synthetische Passwörter und lokale Funktionsaufrufe.
+
+### Isolierter LIVE-Freigabe-Gate
+`OfflineLiveApprovalGate` in `worker/offline_live_gate.py` bindet einen zuvor extern erzeugten LIVE-Vorschlag an ein im lokalen Operator-Authentifikator einmalig erzeugtes Ticket. In einer SQLite-Schreibtransaktion validiert er Payload und Digest, verbraucht das Ticket, aktualisiert den Zustand und schreibt die unabhängige Audit-Zeile. Alle HTTP-/Browser-/SSH-Einstiegspunkte bleiben davon unberührt; `claim_execution` im LIVE-Journal bleibt absichtlich deaktiviert. Audit-/Authentifizierungstests sind reine Python-Fixtures.
