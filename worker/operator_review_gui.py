@@ -60,7 +60,7 @@ def open_local_review(controller: OperatorReviewController, request_id: str):
               font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
     ttk.Label(frame, text="Die Freigabe startet KEINE SSH-Verbindung und sendet nichts an ChatGPT.").pack(anchor="w")
 
-    preview = scrolledtext.ScrolledText(frame, wrap="none", height=24, font=("Consolas", 10))
+    preview = scrolledtext.ScrolledText(frame, wrap="word", height=24, font=("Consolas", 10))
     preview.pack(fill="both", expand=True, pady=(10, 8))
     preview.insert("1.0", review.render_text())
     preview.configure(state="disabled")
