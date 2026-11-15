@@ -164,11 +164,16 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     ).then(()=>reply({ok:true})).catch(e=>reply({ok:false,error:String(e)}));
     return true;
   }
-  if(msg.type==='LIST_SSH_PROPOSALS' || msg.type==='DECIDE_SSH_PROPOSAL'){
+  if(msg.type==='LIST_SSH_PROPOSALS' || msg.type==='LIST_MOCK_RESULTS' || msg.type==='DECIDE_SSH_PROPOSAL'){
     if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_review_sender'});return;}
     (async()=>{
       if(msg.type==='LIST_SSH_PROPOSALS'){
         const result=await api('/ssh/proposals');
+        reply({ok:true,items:Array.isArray(result.items)?result.items:[]});
+        return;
+      }
+      if(msg.type==='LIST_MOCK_RESULTS'){
+        const result=await api('/ssh/mock-results');
         reply({ok:true,items:Array.isArray(result.items)?result.items:[]});
         return;
       }
