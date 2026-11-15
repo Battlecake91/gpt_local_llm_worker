@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import secrets
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -38,13 +37,6 @@ class LiveTargetBinding:
     def digest(self):
         content = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-@dataclass(frozen=True)
-class VerifiedOperator:
-    """Only a contract; construction is NOT authentication or proof of identity."""
-    identifier: str
-    verified_by: str
 
 
 class LiveApprovalLedger:
