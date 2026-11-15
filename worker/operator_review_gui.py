@@ -105,9 +105,11 @@ def open_local_review(controller: OperatorReviewController, request_id: str):
             messagebox.showinfo("Freigabe protokolliert",
                                 "Der Auftrag ist freigegeben, wird aber nicht ausgeführt.",
                                 parent=root)
+            password.delete(0, tk.END)
             root.destroy()
         finally:
-            password.delete(0, tk.END)
+            if root.winfo_exists():
+                password.delete(0, tk.END)
 
     approve_button.configure(command=approve)
     approve_button.pack(side="right")
