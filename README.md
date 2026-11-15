@@ -38,3 +38,7 @@ Das Seitenpanel enthält inzwischen einen eingeklappten Bereich für vollständi
 ## Offline SSH Fixture-Simulation
 
 Unter `worker/mock_executor.py` liegt ein ausdrücklich nicht-netzwerkfähiger Executor für bereits genehmigte Testaufträge. Er validiert den kompletten gespeicherten Befehls-Digest erneut, erzeugt nur statische `MOCK ONLY`-Ausgaben, setzt Timeouts lediglich als Testkennzeichen, begrenzt UTF-8-Output und verhindert Wiederausführung nach Erfolg/Fehler/Absturz. Kein SSH-Client, keine realen Befehle, kein Auto-Send. Siehe [Windows-Demo](INSTALL.md#bereits-freigegebenen-ssh-auftrag-offline-simulieren) und `tests/test_mock_executor.py`.
+
+## Gespeicherte Mock-Resultate im Brave-Seitenpanel
+
+Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistierte `MOCK_ONLY`-Resultate ausschließlich lesend: Auftrag, Originalchat, Host, Status, Command-IDs, Exitcodes, Timeout-/Trunkierungskennzeichen sowie stdout/stderr. Ein authentifizierter GET-Endpunkt liest SQLite, das Background-Script akzeptiert die Abfrage ausschließlich aus der vertrauenswürdigen Panel-Seite, und die UI setzt Output nur als Text. Weder erneute Ausführung noch Auto-Send werden durch das Anzeigen ausgelöst. Anleitung: [INSTALL.md](INSTALL.md#gespeicherte-mock-ergebnisse-im-brave-seitenpanel-anzeigen).
