@@ -1,6 +1,7 @@
 """No SSH, no browser, no network: durable gate and restart tests."""
 import tempfile
 import sqlite3
+from contextlib import closing
 import unittest
 from pathlib import Path
 
@@ -64,7 +65,9 @@ class ApprovalStateTests(unittest.TestCase):
 
     def test_old_database_migrates_existing_rows_to_mock_scope(self):
         legacy = Path(self.tmp.name) / "old.sqlite"
-        with sqlite3.connect(legacy) as connection:
+        # sqlite3.Connection.__exit__ commits but does not close the handle.
+        # Windows refuses to remove a temp SQLite file while it is open.
+        with closing(sqlite3.connect(legacy)) as connection, connection:
             connection.execute(
                 "CREATE TABLE ssh_batches ("
                 "request_id TEXT PRIMARY KEY, host_id TEXT NOT NULL,"
