@@ -53,8 +53,11 @@ class OfflineLiveApprovalGate:
             """)
 
     def approve_with_ticket(self, request_id: str, ticket: OperatorTicket) -> str:
-        # BEGIN IMMEDIATE serializes concurrent approval attempts per DB file.
+        # Explicitly reserve the SQLite writer lock *before* reading proposal
+        # state or burning the ticket. isolation_level alone does not begin
+        # a transaction on a read-only SELECT.
         with self._ledger._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 "SELECT command_sha256,host_id,target_digest,proposal_json,"
                 "conversation_id,tab_id,status FROM live_proposals WHERE request_id=?",
