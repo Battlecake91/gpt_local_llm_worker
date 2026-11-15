@@ -89,3 +89,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Offline Operator Login → LIVE Approval
 `TrustedOfflineOperatorFlow` in `worker/trusted_operator_flow.py` verknüpft die bereits gespeicherte Betreiberidentität mit der neustartfesten Fehlversuchssperre und dem atomaren LIVE-Audit-Gate. Die öffentliche Methode `approve(request_id, password)` akzeptiert keine Ziel-/Digest-Overrides und benutzt ausschließlich die Bindungswerte des bestehenden `live_proposals`-Datensatzes. Kein CLI-/HTTP-/Brave-Import, kein SSH-Aufruf. Ein künftiges vertrauenswürdiges Benutzerinterface muss diesen Weg nutzen, niemals einen direkten `OperatorAuthenticator.verify_for_proposal`-Aufruf.
+
+### Lokaler Betreiber-Review, ausdrücklich ohne SSH-Ausführung
+`OperatorReviewController` (`worker/operator_review.py`) validiert Zielhost und vollständigen Command-Digest, bereitet das vollständige Anzeigeobjekt auf und verlangt vor `TrustedOfflineOperatorFlow.approve` eine explizite Full-Batch-Bestätigung. `worker/operator_review_gui.py` stellt diese Freigabe in einer ausschließlich manuell geöffneten Tkinter-Oberfläche dar. Benutzerpasswörter werden nicht in CLI-Argumente gegeben. Weder der Mock-Bridge-Server noch die Brave-Erweiterung sind beteiligt. Das Vorhandensein einer LIVE-Freigabe startet keinerlei SSH-Kommando.
