@@ -46,3 +46,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 ### Vorbereitung eines echten SSH-Transports
 
 `worker/ssh_transport.py` definiert eine später separat zu integrierende OpenSSH-Komponente mit fest konfiguriertem Ziel, tatsächlicher Hostkey-Prüfung über den vollständigen öffentlichen Schlüssel, ohne interaktiven SSH-Agent/TTY, mit Prozess-Timeout und kombinierten Ausgabelimits. **Nicht aktiviert:** kein Live-SSH-CLI, kein produktiver Executor, keine Kopplung an Freigaben und kein Auto-Send. Die Fake-Runner-Vertragstests liegen unter `tests/test_ssh_transport.py`; für echte Verbindungen ist eine getrennte ausdrückliche Freigabe erforderlich.
+
+### Approval-to-Transport Offline-Vertrag
+`worker/execution_coordinator.py` verbindet den vorhandenen Approval-Store testweise mit einem **ausschließlich simulierten** Transport. Er erzwingt erneut den vollständigen Digest, genau einen RUNNING-Claim, Stop-on-Failure und UNKNOWN nach unklarem Fehler. Er ist absichtlich **nicht** mit Brave, FastAPI, CLI oder OpenSSH verbunden; eine Mock-Freigabe und eine leicht konstruierbare Fixture-Marke sind keine produktive Autorisierung. Offline-Tests: `py -m pytest -q tests/test_execution_coordinator.py`.
