@@ -58,3 +58,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Offline LIVE-Freigabe mit Audit
 `worker/offline_live_gate.py` verbindet Betreiber-Einmaltickets mit dem separaten LIVE-Journal und schreibt Freigabe plus Audit atomar in SQLite. Nur direkter Offline-Python-Bibliotheksaufruf, keine API/CLI-/Brave-Verbindung und ausdrücklich **keine SSH-Ausführung**. Test: `py -m pytest -q tests/test_offline_live_gate.py`.
+
+### Betreiber-Zugangsdaten dauerhaft ablegen (Offline-Baustein)
+`worker/operator_credentials.py` hält einen gesalzenen Passwortverifikator dauerhaft vor, ohne Klartextpasswort. Windows nutzt benutzergebundene DPAPI-Verschlüsselung, Linux private Dateirechte. Es gibt bewusst **noch keinen** Installations- oder Anmelde-Endpunkt; auch diese Ablage aktiviert keinen LIVE-SSH. Isolierte Tests: `py -m pytest -q tests/test_operator_credentials.py`.
