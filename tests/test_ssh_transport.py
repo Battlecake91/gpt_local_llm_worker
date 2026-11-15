@@ -129,7 +129,7 @@ class SSHTransportTests(unittest.TestCase):
     def test_utf8_boundary_never_expands_bounded_output(self):
         from worker.ssh_transport import _decode
         self.assertEqual(_decode("ä".encode("utf-8")[:1]), "")
-        self.assertLessEqual(len(_decode(b"\\xff" * 100).encode("utf-8")), 100)
+        self.assertLessEqual(len(_decode(bytes([0xff]) * 100).encode("utf-8")), 100)
 
     def test_runner_marks_actual_wait_timeout_with_fake_process(self):
         class FakeProcess:
