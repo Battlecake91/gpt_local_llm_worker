@@ -267,3 +267,10 @@ Keine Änderungen an SSH-Executor, Ollama, Docker oder anderen Feature-Branches.
 - Benutzer führte `node --test tests/*.cjs` nach `520f8ef` erfolgreich aus: **58 Tests, 58 PASS, 0 FAIL, 0 SKIP**, 686.6183 ms. Auch `mock history retrieval is restricted to the extension sidepanel` ist PASS.
 - Letzter übermittelter vollständiger Python-Lauf: `py -m pytest -q` → **48 passed, 10 subtests passed**, 1.23 s.
 - Damit sind die automatisierten JS-/Python-Suites im Windows-Checkout grün. Noch offen bleibt **Live-UI-Abnahme** für den neuen eingeklappten Abschnitt `Simulierte SSH-Ergebnisse` mit dem bereits persistierten erfolgreichen Mock-Auftrag `review-498c904027c04f54beecb5c87cb7b9f3` nach Neustart des Mock-Servers und Reload der Erweiterung. Keine echte SSH-Verbindung oder Auto-Send-Freigabe daraus ableiten.
+
+## Brave zeigt 0 Mock-Resultate trotz erfolgreicher Offline-Simulation (2026-11-15)
+
+- Benutzer zeigt im Seitenpanel **0 gespeicherte Mock-Ergebnisse**, Backend-Konnektivität und Capture-ACK `accepted` vorhanden. Die vorherige lokale Offline-Simulation derselben festen Request-ID hatte `SUCCEEDED` geliefert; sie persistiert in `%LOCALAPPDATA%\\gpt-local-llm-worker\\mock-review.sqlite3`.
+- Bei Inspektion zeigte sich: `GET /ssh/mock-results` gab bei fehlendem `BRIDGE_APPROVAL_DB` einfach `{"items":[]}` zurück und täuschte eine leere Historie vor. Korrigiert auf HTTP 503 mit expliziter Meldung `Mock approval database is not configured; restart with -ReviewHosts`. Passender Regressionstest in `tests/test_review_api.py` ergänzt.
+- Die tatsächliche Ursache auf dem Windows-Rechner ist noch **nicht verifiziert**. Nächste Diagnose: dieselbe lokale SQLite-Datei mit `sqlite3` auslesen, `GET /api/bridge/v1/ssh/mock-results` direkt per PowerShell abfragen; Mock-Prozess gegebenenfalls mit `-ReviewHosts @('lab-nas')` neu starten. Wenn die direkte API Daten liefert, aber das Panel nicht, ist es ein Anzeigeproblem. Wenn die API leer liefert und die Datei Einträge enthält, stimmt die DB-Verbindung oder der Prozess nicht.
+- Kein automatischer ChatGPT-Versand und keine echten SSH-Befehle freigegeben.
