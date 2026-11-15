@@ -57,3 +57,7 @@ Das Brave-Seitenpanel besitzt jetzt eine ausdrücklich als Mock bezeichnete SSH-
 ### Offline SSH fixture executor (2026-11-15)
 
 `worker/mock_executor.py` konsumiert `ApprovalStore`-Datensätze nur im Status `APPROVED` mit passender Approval-ID, Hostkonfiguration und frisch nachberechnetem Batch-Digest. Eine Fixture-Map liefert vorgegebene stdout/stderr/Exitcodes/Timeoutflags; der Executor führt die gespeicherten Befehle **niemals** aus. Vor der simulierten Bearbeitung persistiert er `RUNNING`, und schreibt anschließend terminalen Batchstatus sowie begrenzte Resultate atomar nach SQLite. Der optionale explizite Aufruf `worker.mock_cli`/ `windows-brave-simulate.ps1` kann einen bereits im Panel bestätigten Mock-Auftrag genau einmal simulieren. Kein API-Endpoint startet die Simulation automatisch, und kein Browser-Auto-Send ist angeschlossen.
+
+### Read-only mock result observation
+
+The isolated mock backend now exposes authenticated `GET /api/bridge/v1/ssh/mock-results`. It lists a bounded window of completed SQLite fixture results joined to their original host, tab and conversation. The MV3 background permits `LIST_MOCK_RESULTS` only from its exact trusted `panel.html` origin. The side panel renders each result inside a collapsed details element using `textContent`. This path cannot claim an SSH job, simulate one again or enqueue ChatGPT outbound text.
