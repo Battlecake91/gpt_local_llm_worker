@@ -53,3 +53,7 @@ A browser UI is not a stable API. Selectors and completion heuristics must be co
 ### Isolierter UI-Freigabeschritt
 
 Das Brave-Seitenpanel besitzt jetzt eine ausdrücklich als Mock bezeichnete SSH-Review-Ansicht. `GET /api/bridge/v1/ssh/proposals` zeigt offene, validierte Vorschläge einschließlich unveränderlichem Digest und vollständig geordnetem Block. `approve/reject` wird nur nach einer separaten Benutzeraktion in der vertrauenswürdigen Extension-Seite weitergeleitet; die Mock-API fordert Bearer-Token und prüft Ursprung und Digest erneut. Ohne konfigurierte `BRIDGE_ALLOWED_HOSTS` und `BRIDGE_APPROVAL_DB` ist diese Review-Funktion inaktiv. Ein bestätigter Vorschlag aktiviert weder Executor noch Auto-Send.
+
+### Offline SSH fixture executor (2026-11-15)
+
+`worker/mock_executor.py` konsumiert `ApprovalStore`-Datensätze nur im Status `APPROVED` mit passender Approval-ID, Hostkonfiguration und frisch nachberechnetem Batch-Digest. Eine Fixture-Map liefert vorgegebene stdout/stderr/Exitcodes/Timeoutflags; der Executor führt die gespeicherten Befehle **niemals** aus. Vor der simulierten Bearbeitung persistiert er `RUNNING`, und schreibt anschließend terminalen Batchstatus sowie begrenzte Resultate atomar nach SQLite. Der optionale explizite Aufruf `worker.mock_cli`/ `windows-brave-simulate.ps1` kann einen bereits im Panel bestätigten Mock-Auftrag genau einmal simulieren. Kein API-Endpoint startet die Simulation automatisch, und kein Browser-Auto-Send ist angeschlossen.
