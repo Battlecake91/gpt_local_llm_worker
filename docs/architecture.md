@@ -80,3 +80,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Isolierter LIVE-Freigabe-Gate
 `OfflineLiveApprovalGate` in `worker/offline_live_gate.py` bindet einen zuvor extern erzeugten LIVE-Vorschlag an ein im lokalen Operator-Authentifikator einmalig erzeugtes Ticket. In einer SQLite-Schreibtransaktion validiert er Payload und Digest, verbraucht das Ticket, aktualisiert den Zustand und schreibt die unabhängige Audit-Zeile. Alle HTTP-/Browser-/SSH-Einstiegspunkte bleiben davon unberührt; `claim_execution` im LIVE-Journal bleibt absichtlich deaktiviert. Audit-/Authentifizierungstests sind reine Python-Fixtures.
+
+### Persistenz des Betreiber-Credential-Records
+`worker/operator_credentials.py` ist ein isolierter Dateispeicher für den gesalzenen scrypt-Verifikator. Windows nutzt DPAPI (Current User); POSIX erfordert `0600`/eigenen Dateibesitzer sowie ein nicht durch Dritte beschreibbares Verzeichnis. Die Datei wird exklusiv erstellt und niemals überschrieben. Das Modul wird weder von `mock/backend.py` noch der Erweiterung, SSH-Ausführung oder einer aktivierten LIVE-API verwendet. Ein wirkliches Betreiber-Enrollment und die dauerhafte Fehlversuchssperre sind separate Arbeitsblöcke.
