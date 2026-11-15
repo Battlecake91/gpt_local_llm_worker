@@ -139,6 +139,9 @@ class ReviewAPITests(unittest.TestCase):
     def test_review_disabled_by_default(self):
         with patch.dict(os.environ, {"BRIDGE_APPROVAL_DB": "", "BRIDGE_ALLOWED_HOSTS": ""}):
             self.assertEqual(self.pending().json()["items"], [])
+            response = self.client.get("/api/bridge/v1/ssh/mock-results", headers=self.headers)
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("not configured", response.json()["detail"])
             self.assertEqual(self.capture(ssh_text()).status_code, 200)
 
 
