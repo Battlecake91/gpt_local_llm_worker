@@ -148,6 +148,23 @@ class ApprovalStore:
                 (request_id, result["status"], serialized)
             )
 
+    def recent_mock_results(self, limit: int = 20):
+        """Read-only recent execution history; never claim, execute or resend."""
+        if type(limit) is not int:
+            raise ValueError("invalid_result_limit")
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT b.request_id,b.host_id,b.conversation_id,b.tab_id,b.status,r.result_json "
+                "FROM mock_execution_results AS r "
+                "JOIN ssh_batches AS b ON b.request_id=r.request_id "
+                "ORDER BY r.rowid DESC LIMIT ?", (min(max(limit, 1), 100),)
+            ).fetchall()
+        return [
+            {"request_id": row[0], "host_id": row[1], "conversation_id": row[2],
+             "tab_id": row[3], "status": row[4], "result": json.loads(row[5])}
+            for row in rows
+        ]
+
     def get_mock_result(self, request_id: str):
         with self._connect() as db:
             row = db.execute(
