@@ -61,3 +61,7 @@ Das Brave-Seitenpanel besitzt jetzt eine ausdrücklich als Mock bezeichnete SSH-
 ### Read-only mock result observation
 
 The isolated mock backend now exposes authenticated `GET /api/bridge/v1/ssh/mock-results`. It lists a bounded window of completed SQLite fixture results joined to their original host, tab and conversation. The MV3 background permits `LIST_MOCK_RESULTS` only from its exact trusted `panel.html` origin. The side panel renders each result inside a collapsed details element using `textContent`. This path cannot claim an SSH job, simulate one again or enqueue ChatGPT outbound text.
+
+### Unwired OpenSSH transport contract
+
+`worker/ssh_transport.py` defines operator-side pinned `SSHHostConfig`, isolated OpenSSH argv/known_hosts construction and a bounded process runner. It is **not imported or used** by `mock/backend.py`, the Chrome extension, the mock executor or any scheduler. Only fake-runner offline tests are permitted at this stage; real host connectivity, trusted operator authorization and durable result routing are separate forthcoming gates. A local `ssh` kill cannot guarantee the remote shell stopped: uncertain executions must remain `UNKNOWN`, not replayed.
