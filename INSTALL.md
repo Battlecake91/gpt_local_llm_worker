@@ -149,3 +149,21 @@ Neu hinzugefügte Tests:
 ```powershell
 py -m pytest -q tests/test_mock_executor.py tests/test_approval_state.py
 ```
+
+## Gespeicherte Mock-Ergebnisse im Brave-Seitenpanel anzeigen
+
+Nach einem erfolgreichen `windows-brave-simulate.ps1`-Lauf liegt das Ergebnis dauerhaft in der lokalen SQLite-Mock-Datenbank. Die Erweiterung zeigt es ausschließlich **lesend** an.
+
+1. Repository mit `git pull --ff-only origin feature/brave-chat-bridge` aktualisieren.
+2. Erweiterung unter `brave://extensions` neu laden. Der Mock-Worker mit `-ReviewHosts @('lab-nas')` muss laufen; einen bereits laufenden Worker nach Repo-Update neu starten, damit der neue API-Endpunkt geladen wird.
+3. Im Seitenpanel **Simulierte SSH-Ergebnisse → Gespeicherte Ergebnisse anzeigen** öffnen und **Ergebnisse aktualisieren** wählen.
+4. Für `review-498c904027c04f54beecb5c87cb7b9f3` sollte `SUCCEEDED` mit den zwei Kommando-IDs `host` und `user`, Exitcode `0`, den jeweils gespeicherten `MOCK ONLY`-Ausgaben und dem Ursprungs-Chat erscheinen.
+
+Der neue GET-Endpunkt `/api/bridge/v1/ssh/mock-results` ist Bearer-authentifiziert. Der Background-Service akzeptiert `LIST_MOCK_RESULTS` nur aus dem eigenen Seitenpanel, nicht von Content-Scripts. Im Panel wird untrusted Output ausschließlich über `textContent` gesetzt. **Kein Auto-Send, kein erneutes Simulieren und kein realer SSH-Zugriff.**
+
+Tests für den neuen Abschnitt:
+
+```powershell
+node --test tests/*.cjs
+py -m pytest -q
+```
