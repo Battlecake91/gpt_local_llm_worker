@@ -49,3 +49,6 @@ Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistier
 
 ### Approval-to-Transport Offline-Vertrag
 `worker/execution_coordinator.py` verbindet den vorhandenen Approval-Store testweise mit einem **ausschließlich simulierten** Transport. Er erzwingt erneut den vollständigen Digest, genau einen RUNNING-Claim, Stop-on-Failure und UNKNOWN nach unklarem Fehler. Er ist absichtlich **nicht** mit Brave, FastAPI, CLI oder OpenSSH verbunden; eine Mock-Freigabe und eine leicht konstruierbare Fixture-Marke sind keine produktive Autorisierung. Offline-Tests: `py -m pytest -q tests/test_execution_coordinator.py`.
+
+### LIVE-Freigabedomäne (weiterhin deaktiviert)
+`worker/live_approval.py` führt ein unabhängiges, unveränderliches LIVE-Vorschlagsjournal ein. Es ist an keine UI, API oder CLI angeschlossen; `approve` und `claim_execution` sind bewusst gesperrt. Die bisherigen `MOCK`-Freigaben werden nicht übernommen. Offline-Vertragstests: `py -m pytest -q tests/test_live_approval.py`.
