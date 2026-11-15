@@ -42,3 +42,7 @@ Unter `worker/mock_executor.py` liegt ein ausdrücklich nicht-netzwerkfähiger E
 ## Gespeicherte Mock-Resultate im Brave-Seitenpanel
 
 Der eingeklappte Abschnitt **Simulierte SSH-Ergebnisse** zeigt fertig persistierte `MOCK_ONLY`-Resultate ausschließlich lesend: Auftrag, Originalchat, Host, Status, Command-IDs, Exitcodes, Timeout-/Trunkierungskennzeichen sowie stdout/stderr. Ein authentifizierter GET-Endpunkt liest SQLite, das Background-Script akzeptiert die Abfrage ausschließlich aus der vertrauenswürdigen Panel-Seite, und die UI setzt Output nur als Text. Weder erneute Ausführung noch Auto-Send werden durch das Anzeigen ausgelöst. Anleitung: [INSTALL.md](INSTALL.md#gespeicherte-mock-ergebnisse-im-brave-seitenpanel-anzeigen).
+
+### Vorbereitung eines echten SSH-Transports
+
+`worker/ssh_transport.py` definiert eine später separat zu integrierende OpenSSH-Komponente mit fest konfiguriertem Ziel, tatsächlicher Hostkey-Prüfung über den vollständigen öffentlichen Schlüssel, ohne interaktiven SSH-Agent/TTY, mit Prozess-Timeout und kombinierten Ausgabelimits. **Nicht aktiviert:** kein Live-SSH-CLI, kein produktiver Executor, keine Kopplung an Freigaben und kein Auto-Send. Die Fake-Runner-Vertragstests liegen unter `tests/test_ssh_transport.py`; für echte Verbindungen ist eine getrennte ausdrückliche Freigabe erforderlich.
