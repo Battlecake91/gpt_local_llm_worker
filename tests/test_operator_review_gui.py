@@ -69,6 +69,112 @@ class LocalReviewConfigTests(unittest.TestCase):
         self.assertTrue(callable(module.open_local_review))
         self.assertTrue(callable(module.main))
 
+    def test_successful_callback_never_queries_destroyed_tk_application(self):
+        """Regression: Python 3.13 raises TclError for winfo after destroy."""
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        events = []
+        buttons = []
+
+        class FakeWidget:
+            def __init__(self, *args, **kwargs):
+                self.command = kwargs.get("command")
+                self.text = kwargs.get("text", "")
+                if self.text == "LIVE-Batch freigeben":
+                    buttons.append(self)
+
+            def pack(self, **kwargs):
+                return None
+
+            def insert(self, *args):
+                return None
+
+            def configure(self, **kwargs):
+                if "command" in kwargs:
+                    self.command = kwargs["command"]
+                return None
+
+            def focus_set(self):
+                return None
+
+            def get(self):
+                return "fixture-only-password"
+
+            def delete(self, *args):
+                events.append("password_cleared")
+
+        class FakeRoot(FakeWidget):
+            destroyed = False
+
+            def title(self, *args):
+                return None
+
+            def geometry(self, *args):
+                return None
+
+            def minsize(self, *args):
+                return None
+
+            def destroy(self):
+                self.destroyed = True
+                events.append("destroyed")
+
+            def winfo_exists(self):
+                if self.destroyed:
+                    raise RuntimeError("Tk accessed after destroy")
+                return True
+
+            def mainloop(self):
+                self.assert_has_button()
+                buttons[0].command()
+
+            def assert_has_button(self):
+                if len(buttons) != 1:
+                    raise AssertionError("expected exactly one approve button")
+
+        class FakeVar:
+            def __init__(self, value=None):
+                self.value = True if value is False else value
+
+            def get(self):
+                return self.value
+
+            def set(self, value):
+                self.value = value
+
+        tk = SimpleNamespace(Tk=FakeRoot, BooleanVar=FakeVar, StringVar=FakeVar,
+                             END="end")
+        ttk = SimpleNamespace(Frame=FakeWidget, Label=FakeWidget,
+                              Checkbutton=FakeWidget, Entry=FakeWidget,
+                              Button=FakeWidget)
+        messagebox = SimpleNamespace(
+            showinfo=lambda *args, **kwargs: events.append("success_popup"),
+            showerror=lambda *args, **kwargs: events.append("error_popup"),
+            showwarning=lambda *args, **kwargs: events.append("warning_popup"),
+        )
+        scrolledtext = SimpleNamespace(ScrolledText=FakeWidget)
+        tk.ttk, tk.messagebox, tk.scrolledtext = ttk, messagebox, scrolledtext
+        review = Mock(command_sha256="a" * 64)
+        review.render_text.return_value = "fixture review only"
+        controller = Mock()
+        controller.prepare.return_value = review
+        controller.approve.return_value = "live-fixture-approval"
+
+        from worker.operator_review_gui import open_local_review
+        with patch.dict(sys.modules, {
+            "tkinter": tk, "tkinter.ttk": ttk,
+            "tkinter.messagebox": messagebox,
+            "tkinter.scrolledtext": scrolledtext,
+        }):
+            open_local_review(controller, "fixture-request")
+
+        controller.approve.assert_called_once()
+        self.assertIn("success_popup", events)
+        self.assertNotIn("error_popup", events)
+        self.assertLess(events.index("password_cleared"), events.index("destroyed"))
+
 
 if __name__ == "__main__":
     unittest.main()
