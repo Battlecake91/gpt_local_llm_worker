@@ -95,21 +95,19 @@ def open_local_review(controller: OperatorReviewController, request_id: str):
         except Exception:
             # Keep backend-specific failures and operator secrets out of GUI
             # diagnostics. Persistent lockout still records wrong passwords.
+            password.delete(0, tk.END)
             status.set("Freigabe verweigert. Auftrag und Anmeldung prüfen.")
             messagebox.showerror("Freigabe verweigert",
                                  "Keine Freigabe erteilt. Details lokal im Audit prüfen.",
                                  parent=root)
             approve_button.configure(state="normal")
         else:
+            password.delete(0, tk.END)
             status.set("LIVE-Freigabe protokolliert. Keine SSH-Ausführung.")
             messagebox.showinfo("Freigabe protokolliert",
                                 "Der Auftrag ist freigegeben, wird aber nicht ausgeführt.",
                                 parent=root)
-            password.delete(0, tk.END)
             root.destroy()
-        finally:
-            if root.winfo_exists():
-                password.delete(0, tk.END)
 
     approve_button.configure(command=approve)
     approve_button.pack(side="right")
