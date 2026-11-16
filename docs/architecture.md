@@ -92,3 +92,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Lokaler Betreiber-Review, ausdrücklich ohne SSH-Ausführung
 `OperatorReviewController` (`worker/operator_review.py`) validiert Zielhost und vollständigen Command-Digest, bereitet das vollständige Anzeigeobjekt auf und verlangt vor `TrustedOfflineOperatorFlow.approve` eine explizite Full-Batch-Bestätigung. `worker/operator_review_gui.py` stellt diese Freigabe in einer ausschließlich manuell geöffneten Tkinter-Oberfläche dar. Benutzerpasswörter werden nicht in CLI-Argumente gegeben. Weder der Mock-Bridge-Server noch die Brave-Erweiterung sind beteiligt. Das Vorhandensein einer LIVE-Freigabe startet keinerlei SSH-Kommando.
+
+### Lokales Operator-Setup ohne Ausführung
+`worker/operator_setup.py` ist ein ausschließlich manuell aufrufbares Terminal-Enrollment. Es erzeugt in einem angegebenen lokalen absoluten Verzeichnis eine nicht überschreibbare gesalzene Betreiber-Credential und die dauerhafte Rate-Limit-Datenbank. Die GUI nutzt die bereits existierenden Dateien, aber das Setup legt weder Host-Allowlist noch LIVE-Auftrag an. Keine Auto-Integration mit Brave, kein SSH-Start.
