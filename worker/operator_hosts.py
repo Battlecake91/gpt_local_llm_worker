@@ -13,8 +13,6 @@ import hashlib
 import json
 import os
 import re
-import stat
-import sys
 from pathlib import Path
 
 from worker.live_approval import LiveTargetBinding
@@ -72,7 +70,7 @@ def enroll_host(
     key_file: Path,
     expected_fingerprint: str,
 ) -> LiveTargetBinding:
-    """Create a new allowlist or append a new host; never replace existing IDs."""
+    """Create one new allowlist, never overwrite an existing configuration."""
     config_file = Path(config_file)
     key_file = Path(key_file)
     if (not config_file.is_absolute() or not key_file.is_absolute()
