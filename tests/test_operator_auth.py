@@ -30,6 +30,20 @@ class OperatorAuthTests(unittest.TestCase):
         with self.assertRaisesRegex(OperatorAuthError, "invalid_credential_record"):
             OperatorPasswordRecord("local-operator", b"x" * 16, "x" * 32)
 
+    def test_eight_character_password_is_accepted(self):
+        for secret in ("12345678", "äöüßabcd"):
+            with self.subTest(secret_length=len(secret)):
+                record = create_password_record("local-operator", secret)
+                auth = OperatorAuthenticator(record)
+                ticket = auth.verify_for_proposal(secret, **self.binding)
+                self.assertEqual(auth.consume_for_proposal(ticket, **self.binding),
+                                 "local-operator")
+
+    def test_seven_unicode_characters_are_rejected(self):
+        # UTF-8 can exceed 8 bytes even with fewer than 8 characters.
+        with self.assertRaisesRegex(OperatorAuthError, "invalid_operator_secret"):
+            create_password_record("local-operator", "äöüßabc")
+
     def test_wrong_password_fails_without_ticket(self):
         with self.assertRaisesRegex(OperatorAuthError, "operator_authentication_failed"):
             self.auth.verify_for_proposal("this-is-wrong-passphrase", **self.binding)
