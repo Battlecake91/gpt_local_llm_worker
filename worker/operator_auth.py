@@ -18,7 +18,7 @@ _KEY_BYTES = 32
 _MAX_ATTEMPTS = 5
 _LOCKOUT_SECONDS = 60
 _TICKET_SECONDS = 90
-_MIN_SECRET_BYTES = 16
+_MIN_SECRET_CHARS = 8
 _MAX_SECRET_BYTES = 1024
 
 
@@ -44,7 +44,7 @@ def _derive(secret: str, salt: bytes) -> bytes:
     if not isinstance(secret, str):
         raise OperatorAuthError("invalid_operator_secret")
     encoded = secret.encode("utf-8")
-    if not _MIN_SECRET_BYTES <= len(encoded) <= _MAX_SECRET_BYTES:
+    if len(secret) < _MIN_SECRET_CHARS or len(encoded) > _MAX_SECRET_BYTES:
         raise OperatorAuthError("invalid_operator_secret")
     return hashlib.scrypt(encoded, salt=salt, n=2**14, r=8, p=1, dklen=_KEY_BYTES)
 
