@@ -47,6 +47,14 @@ class OperatorSetupTests(unittest.TestCase):
             enroll_operator(self.directory, "fixture-operator", "short", "short")
         self.assertFalse(self.directory.exists())
 
+    def test_eight_character_password_enrolls(self):
+        credential_path, rate_path = enroll_operator(
+            self.directory, "fixture-operator", "12345678", "12345678")
+        self.assertTrue(credential_path.is_file())
+        self.assertTrue(rate_path.is_file())
+        self.assertEqual(OperatorCredentialFile(credential_path).load().operator_id,
+                         "fixture-operator")
+
     def test_relative_path_is_denied(self):
         with self.assertRaisesRegex(OperatorSetupError, "invalid_state_directory"):
             enroll_operator(Path("relative"), "fixture-operator", self.password, self.password)
