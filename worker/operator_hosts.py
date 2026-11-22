@@ -31,8 +31,11 @@ def parse_public_host_key(source: str, fingerprint: str) -> str:
     """Validate a complete OpenSSH public key and its out-of-band fingerprint."""
     if not isinstance(source, str) or not isinstance(fingerprint, str):
         raise HostEnrollmentError("invalid_host_key")
+    if "\\n" in source.strip() or "\\r" in source.strip():
+        raise HostEnrollmentError("invalid_host_key")
+    # OpenSSH .pub files may contain an optional human-readable comment.
     parts = source.strip().split()
-    if len(parts) != 2 or parts[0] not in KEY_TYPES:
+    if len(parts) < 2 or parts[0] not in KEY_TYPES:
         raise HostEnrollmentError("invalid_host_key")
     try:
         raw = base64.b64decode(parts[1], validate=True)
