@@ -51,6 +51,11 @@ class HostEnrollmentTests(unittest.TestCase):
         self.assertNotIn("PRIVATE KEY", saved)
         self.assertEqual(json.loads(saved)[0]["hostname"], "lab.example.invalid")
 
+    def test_open_ssh_public_key_comment_is_ignored(self):
+        self.key_file.write_text(self.key + " root@fixture-server\\n", encoding="ascii")
+        target = self.enroll()
+        self.assertEqual(target.host_public_key, self.key)
+
     def test_wrong_fingerprint_denies_creation(self):
         with self.assertRaisesRegex(HostEnrollmentError, "fingerprint_mismatch"):
             self.enroll(expected_fingerprint="SHA256:" + "A" * 43)
