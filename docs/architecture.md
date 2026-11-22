@@ -95,3 +95,6 @@ SQLite-`ssh_batches.approval_scope` trennt `MOCK` von einer künftig separaten `
 
 ### Lokales Operator-Setup ohne Ausführung
 `worker/operator_setup.py` ist ein ausschließlich manuell aufrufbares Terminal-Enrollment. Es erzeugt in einem angegebenen lokalen absoluten Verzeichnis eine nicht überschreibbare gesalzene Betreiber-Credential und die dauerhafte Rate-Limit-Datenbank. Die GUI nutzt die bereits existierenden Dateien, aber das Setup legt weder Host-Allowlist noch LIVE-Auftrag an. Keine Auto-Integration mit Brave, kein SSH-Start.
+
+### Betreiberkontrollierte SSH-Host-Allowlist
+`worker/operator_hosts.py` erstellt offline den ersten Host-Allowlist-Datensatz im bestehenden Format von `worker/operator_review_gui.load_local_targets`. Das Ziel wird beim Review durch den Target-Digest gebunden; der Parser verlangt den vollständig übereinstimmenden öffentlichen Hostkey und den aus einer unabhängigen Quelle bestätigten SHA-256-Fingerprint. Die Verwaltung ist vom separaten, weiterhin unverdrahteten `worker/ssh_transport.py` entkoppelt und kann keine SSH-Verbindung aufbauen. Weitere Hosts und Änderungen an bestehenden Einträgen sind noch nicht implementiert.
