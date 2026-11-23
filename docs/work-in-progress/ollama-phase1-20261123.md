@@ -70,3 +70,10 @@ node --test tests/*.cjs
 - Keine Anbindung an die bestehenden Mock-Freigabeaktionen. Keine Hoständerung, Freigabe, SSH-Ausführung, Auto-Send oder automatischer Modellwechsel; diese Aufgaben sind weiterhin offen.
 - `tests/test_background.cjs`: nicht vertrauenswürdige Webseiten dürfen Ollama-Vorschläge und Profile nicht abrufen; Tests gewährleisten, dass nur GET-Anfragen erfolgen.
 - Live-Prüfung offen: Start des separat konfigurierten `worker.live_capture_api` mit `--ollama-profiles`, echte Brave-Erweiterung neu laden, neuen abgeschlossenen ChatGPT-Turn erfassen und Vorschau im Panel prüfen. Nicht auf produktivem SSH ausführen.
+
+## Phase 2A, echter Windows-Brave-Integrationsstart
+- `scripts/windows-brave-ollama-preview.ps1` startet den vorhandenen Ollama-LIVE-Capture-Dienst separat auf `127.0.0.1:8765`, mit zufälligem Token, eigener Vorschau-DB und synthetischer Host-Allowlist (`*.example.invalid`). Die lokalen Ollama-Profile werden übernommen, es gibt keine SSH-/Approval-/Auto-Send-Endpunkte.
+- Der Launcher verweigert belegten Port 8765, überschreibt keine vorhandene synthetische Allowlist und überschreibt nicht die Betreiber-Ollama-Konfiguration.
+- Exakte Bedienung, Erweiterungs-ID und Rollback in `INSTALL.md`.
+- Noch **nicht** live auf Windows ausgeführt. Notwendig: Betreiber startet Launcher, fügt Sitzungstoken in Brave ein, lädt die Erweiterung und den ChatGPT-Tab neu, erzeugt neue abgeschlossene Antwort mit eindeutiger NAS-Aufforderung und bash-Block `zpool status`, prüft Anzeige der gespeicherten Ollama-Suggestion.
+- Die vom Betreiber bestätigten 38/38 Live-Benchmark-Treffer auf Stand `9fa3cfe` gelten für Modellklassifikation, nicht für die Browser-Ende-zu-Ende-Integration.
