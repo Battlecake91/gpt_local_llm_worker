@@ -167,3 +167,56 @@ Tests für den neuen Abschnitt:
 node --test tests/*.cjs
 py -m pytest -q
 ```
+
+## Windows: End-to-End Brave -> Ollama -> Seitenpanel (nur Vorschau)
+
+Diese separate Prüfinstanz verwendet `worker.live_capture_api` mit `--ollama-profiles`.
+Sie erzeugt **ausschließlich** Vorschläge in einer lokalen SQLite-Datei. Es gibt
+keinen SSH-Executor, keine LIVE-Freigabe-API und keinen automatischen ChatGPT-Versand.
+
+1. Unter `brave://extensions` die **32-stellige Erweiterungs-ID** notieren. Das
+   Repository unter `feature/brave-chat-bridge` aktualisieren und optional die
+   Regressionstests laufen lassen.
+2. In einem eigenen PowerShell-Fenster aus dem Repository-Verzeichnis starten:
+
+   ```powershell
+   git pull --ff-only
+   .\scripts\windows-brave-ollama-preview.ps1 -ExtensionId 'HIER_32_STELLIGE_ID'
+   ```
+
+3. Das Skript verweigert einen belegten Port 8765 und überschreibt keine vorhandene
+   Test-Allowlist. Es nutzt die vorhandene Datei
+   `%LOCALAPPDATA%\gpt-local-llm-worker\ollama-profiles.json` und legt
+   `brave-preview-targets.json` mit den Testaliasen `nas`,
+   `backup-nas`, `vserver` und **nicht auflösbaren** `*.example.invalid`-Zielen
+   an. Diese Zieldatei dient ausschließlich der Aufnahme von Vorschlägen und
+   ist **keine** echte verifizierte SSH-Hostkonfiguration.
+4. Das Skript zeigt ein zufälliges Sitzungstoken **nur lokal in PowerShell** an.
+   Im Brave-Seitenpanel unter `Lokales Worker-Token` einfügen und speichern.
+   Token weder in einen Chat noch in einen Bericht kopieren. Der Worker zeigt
+   `LIVE proposal intake: approval, SSH and outbound sending DISABLED` an.
+5. Unter `brave://extensions` die entpackte Erweiterung neu laden, dann den
+   ChatGPT-Tab vollständig neu laden (`Strg+R`). Einen **neuen Testchat**
+   öffnen und eine neue Antwort mit explizitem Ziel NAS und einem vollständigen
+   `bash`-Codeblock mit `zpool status` erzeugen lassen. Die Bridge übernimmt
+   nur neue, fertig generierte Antworten.
+6. Im Seitenpanel `Ollama-Analyse (nur Vorschau)` öffnen und
+   `Analysen aktualisieren` klicken. Erwartet: Profil `local`,
+   Modell `qwen3.5:4b`, Host `nas`, Risiko `green`,
+   Codeblock `zpool status`. Die gespeicherte Vorschau ist **nicht**
+   an eine Freigabe oder an einen ausführbaren SSH-Job gekoppelt.
+7. Fehlt der Eintrag: zunächst `Letzte Übertragung`, `Wartende Antworten`
+   und `Fehler` im Panel prüfen. Bei `401` Token prüfen; bei `503`
+   die Ollama-Verbindung bzw. Profilkonfiguration prüfen. Ein nicht erkannter
+   oder nicht handlungsfähiger Antworttext wird nicht als Vorschlag gelistet.
+   Ein neu erzeugter ChatGPT-Turn ist erforderlich; historische Antworten
+   werden absichtlich nicht rückwirkend importiert.
+
+Rollback: PowerShell-Worker mit `Strg+C` stoppen, Erweiterung deaktivieren oder
+zum vorherigen Backend wechseln. Die Testdaten verbleiben ausschließlich unter
+`%LOCALAPPDATA%\gpt-local-llm-worker`; keine SSH- oder NAS-Konfiguration
+wird verändert. Die Konfigurationsdateien des Benutzers werden nicht überschrieben.
+
+**Offene Live-Abnahme:** Dieser Ablauf muss auf dem Windows-PC mit laufendem
+Ollama und einem echten Brave-ChatGPT-Tab durchgeführt werden. GitHub-CI kann
+keine reale Brave-Sitzung oder das lokal installierte Modell prüfen.
