@@ -158,6 +158,21 @@ async function activeConversationTab(){
   if(eligible.length===1)return eligible[0];
   throw Error(eligible.length?'multiple_chatgpt_conversations_open':'active_chatgpt_conversation_required');
 }
+async function listedConversationTabs(){
+  const all=await chrome.tabs.query({url:'https://chatgpt.com/*'});
+  return all.filter(tab=>Number.isInteger(tab.id)&&conversationFromUrl(tab.url))
+    .map(tab=>({tab_id:tab.id,conversation_id:conversationFromUrl(tab.url),
+      title:String(tab.title||'ChatGPT').slice(0,160),
+      active:tab.active===true}));
+}
+async function selectedConversationTab(tabId,conversationId){
+  if(!Number.isSafeInteger(tabId)||tabId<=0 ||
+     typeof conversationId!=='string'||!conversationId)throw Error('invalid_selected_chat');
+  const tab=await chrome.tabs.get(tabId).catch(()=>null);
+  if(!tab || conversationFromUrl(tab.url)!==conversationId)
+    throw Error('selected_chat_changed_or_closed');
+  return tab;
+}
 function trustedPanel(sender){
   return !sender.tab && sender.url===chrome.runtime.getURL('panel.html');
 }
@@ -195,12 +210,21 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     ).then(()=>reply({ok:true})).catch(e=>reply({ok:false,error:String(e)}));
     return true;
   }
-  if(msg.type==='CAPTURE_CURRENT_FROM_PANEL'){
+  if(msg.type==='LIST_CHATGPT_TABS' || msg.type==='CAPTURE_CURRENT_FROM_PANEL' ||
+     msg.type==='PREVIEW_SELECTED_REPLY'){
     if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_capture_sender'});return;}
     (async()=>{
-      if(!state.captureEnabled)throw Error('capture_disabled');
-      const tab=await activeConversationTab();
-      const result=await chrome.tabs.sendMessage(tab.id,{type:'CAPTURE_CURRENT_REPLY'});
+      if(msg.type==='LIST_CHATGPT_TABS'){
+        reply({ok:true,items:await listedConversationTabs()});return;
+      }
+      if(msg.type==='CAPTURE_CURRENT_FROM_PANEL' && !state.captureEnabled)
+        throw Error('capture_disabled');
+      const tab=(msg.tab_id!==undefined || msg.conversation_id!==undefined)
+        ? await selectedConversationTab(msg.tab_id,msg.conversation_id)
+        : await activeConversationTab();
+      const result=await chrome.tabs.sendMessage(tab.id,{
+        type:msg.type==='PREVIEW_SELECTED_REPLY'?'PREVIEW_CURRENT_REPLY':'CAPTURE_CURRENT_REPLY'
+      });
       reply(result?.ok?result:{ok:false,error:result?.error||'content_script_unavailable'});
     })().catch(e=>reply({ok:false,error:String(e.message||e)}));
     return true;
