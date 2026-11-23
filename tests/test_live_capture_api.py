@@ -89,6 +89,35 @@ class LiveCaptureAPITests(unittest.TestCase):
         self.assertEqual(self.post(data).status_code, 200)
         self.assertIsNone(LiveApprovalLedger(self.db).get("live-001"))
 
+    def test_unstructured_capture_body_not_persisted(self):
+        data = dict(self.data(), text="Private chat payload not to be persisted")
+        self.assertEqual(self.post(data).status_code, 200)
+        import sqlite3
+        from contextlib import closing
+        with closing(sqlite3.connect(self.db)) as conn:
+            row = conn.execute(
+                "SELECT text_sha256 FROM live_captures WHERE message_id=?",
+                (data["message_id"],)).fetchone()
+        self.assertEqual(
+            row[0], hashlib.sha256(data["text"].encode("utf-8")).hexdigest())
+        self.assertNotIn(data["text"], self.db.read_bytes().decode("latin-1"))
+
+    def test_cors_is_restricted_to_configured_extension(self):
+        path = "/api/bridge/v1/captures"
+        good = self.client.options(path, headers={
+            "Origin": ORIGIN,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        })
+        self.assertEqual(good.status_code, 200)
+        self.assertEqual(good.headers["access-control-allow-origin"], ORIGIN)
+        wrong = self.client.options(path, headers={
+            "Origin": "https://chatgpt.com",
+            "Access-Control-Request-Method": "POST",
+        })
+        self.assertNotEqual(wrong.headers.get("access-control-allow-origin"),
+                            "https://chatgpt.com")
+
     def test_unknown_host_cannot_create_proposal(self):
         data = self.data(target="unknown")
         self.assertEqual(self.post(data).status_code, 200)
