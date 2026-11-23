@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from worker.live_approval import LiveApprovalLedger
 from worker.operator_review_gui import load_local_targets
 from worker.ssh_protocol import InvalidSSHRequest, parse_ssh_request
-from worker.ollama_analysis import OllamaAnalyzer, ProfileStore, AnalysisError
+from worker.ollama_analysis import OllamaAnalyzer, ProfileStore, AnalysisError, FENCE, PROMPT_LINE
 
 MAX_CAPTURE_TEXT = 256_000
 MAX_CONVERSATION_ID = 256
@@ -83,6 +83,20 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
             )
         """)
 
+    with closing(sqlite3.connect(db_path)) as connection, connection:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS ollama_diagnostics (
+                message_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                tab_id INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                user_prompt_present INTEGER NOT NULL,
+                eligible_shell_blocks INTEGER NOT NULL,
+                model TEXT,
+                FOREIGN KEY(message_id) REFERENCES live_captures(message_id)
+            )
+        """)
+
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(CORSMiddleware, allow_origins=[extension_origin],
                        allow_methods=["GET", "POST"],
@@ -105,11 +119,22 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         # Classification is advisory only. Nothing here grants execution.
         # Analyze outside SQLite's write transaction, so Ollama cannot block other writes.
         analysis = None
+        diagnostic_status = None
+        eligible_shell_blocks = len(FENCE.findall(payload.text)) + len(
+            PROMPT_LINE.findall(FENCE.sub("", payload.text)))
+        model = None
         if analyzer is not None:
             try:
+                model = analyzer.profiles.load()[0]["model"]
                 analysis = analyzer.analyze(payload.text, set(targets), payload.user_prompt)
             except (AnalysisError, OSError) as exc:
                 raise HTTPException(503, "Ollama analysis unavailable: " + str(exc)) from exc
+            diagnostic_status = (
+                "no_shell_blocks" if eligible_shell_blocks == 0 else
+                "classified_nonactionable" if analysis is None else
+                "target_unresolved" if analysis.host is None else
+                "proposal_ready"
+            )
 
         # Capture dedup and LIVE proposal commit in one SQLite transaction.
         with ledger._connect() as conn:
@@ -167,6 +192,14 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 "(message_id,conversation_id,tab_id,text_sha256,observed_at) "
                 "VALUES (?,?,?,?,?)",
                 (payload.message_id, *incoming))
+            if diagnostic_status is not None:
+                conn.execute(
+                    "INSERT INTO ollama_diagnostics "
+                    "(message_id,conversation_id,tab_id,status,user_prompt_present,"
+                    "eligible_shell_blocks,model) VALUES (?,?,?,?,?,?,?)",
+                    (payload.message_id, payload.conversation_id, payload.tab_id,
+                     diagnostic_status, int(bool(payload.user_prompt)),
+                     eligible_shell_blocks, model))
             if analysis is not None:
                 conn.execute(
                     "INSERT INTO ollama_suggestions "
@@ -213,6 +246,24 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         except (AnalysisError, OSError, ValueError) as exc:
             raise HTTPException(422, "Invalid Ollama profile") from exc
         return {"active": selection.name}
+
+    @app.get("/api/bridge/v1/ollama/diagnostics", dependencies=[Depends(require_token)])
+    def list_ollama_diagnostics():
+        # Bounded metadata only. No captured response, user prompt, token, or
+        # raw model output is retained in these diagnostics.
+        with ledger._connect() as conn:
+            rows = conn.execute(
+                "SELECT message_id,conversation_id,tab_id,status,"
+                "user_prompt_present,eligible_shell_blocks,model "
+                "FROM ollama_diagnostics ORDER BY rowid DESC LIMIT 20"
+            ).fetchall()
+        return {"items": [
+            {"message_id": row[0], "conversation_id": row[1],
+             "tab_id": row[2], "status": row[3],
+             "user_prompt_present": bool(row[4]),
+             "eligible_shell_blocks": row[5], "model": row[6]}
+            for row in rows
+        ]}
 
     @app.get("/api/bridge/v1/ollama/suggestions", dependencies=[Depends(require_token)])
     def list_ollama_suggestions():
