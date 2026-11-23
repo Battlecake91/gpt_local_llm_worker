@@ -60,6 +60,14 @@ class OllamaPhase1Tests(unittest.TestCase):
         self.assertEqual(proposal.host_id, "nas")
         self.assertEqual(proposal.commands[0].command, "zpool status")
         self.assertTrue(self.requests[0].url.path.endswith("/api/chat"))
+        payload = json.loads(self.requests[0].content)
+        self.assertIs(payload["think"], False)
+        self.assertEqual(payload["format"]["properties"]["actionable"]["type"], "boolean")
+        self.assertEqual(payload["format"]["properties"]["risk"]["enum"],
+                         ["green", "yellow", "red"])
+        self.assertEqual(payload["format"]["properties"]["commands"]["items"]["type"],
+                         "string")
+        self.assertIn("nas", payload["format"]["properties"]["host"]["anyOf"][0]["enum"])
 
     def test_no_shell_block_is_inert_even_if_prose_says_execute(self):
         self.assertIsNone(self.analyze("Auf NAS bitte zpool status ausführen."))
