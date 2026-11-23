@@ -98,6 +98,32 @@ class OllamaPhase1Tests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "host_not_allowlisted"):
             self.analyze()
 
+    def test_explicit_nas_host_overrides_model_null(self):
+        self.result["host"] = None
+        self.assertEqual(self.analyze().host, "nas")
+
+    def test_explicit_backup_nas_is_not_main_nas(self):
+        self.result["host"] = None
+        self.assertEqual(self.analyze(
+            "Auf dem Backup-NAS ausführen:\\n\\n```bash\\nzpool status\\n```"
+        ).host, "backup-nas")
+
+    def test_explicit_vserver_host_overrides_null(self):
+        self.result["host"] = None
+        self.assertEqual(self.analyze(
+            "Auf dem VServer ausführen:\\n\\n```bash\\nzpool status\\n```"
+        ).host, "vserver")
+
+    def test_conflicting_llm_host_requires_manual_target(self):
+        self.result["host"] = "backup-nas"
+        self.assertIsNone(self.analyze().host)
+
+    def test_host_inside_shell_code_does_not_retarget(self):
+        self.result["host"] = None
+        self.assertIsNone(self.analyze(
+            "Diagnose:\\n\\n```bash\\nprintf 'nas'\\n```"
+        ).host)
+
     def test_ambiguous_host_never_creates_live_batch(self):
         self.result["host"] = None
         self.assertIsNone(self.analyze().batch("b" * 64))
