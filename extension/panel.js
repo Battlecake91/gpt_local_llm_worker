@@ -115,6 +115,62 @@ byId('copy-diagnostics').addEventListener('click',async()=>{
   }
 });
 
+async function refreshOllama(){
+  const status=byId('ollama-status'),container=byId('ollama-suggestions');
+  status.textContent='Lade Ollama-Vorschläge ...';
+  container.replaceChildren();
+  try{
+    const [profiles,list]=await Promise.all([
+      chrome.runtime.sendMessage({type:'LIST_OLLAMA_PROFILES'}),
+      chrome.runtime.sendMessage({type:'LIST_OLLAMA_SUGGESTIONS'})
+    ]);
+    if(!profiles?.ok)throw Error(profiles?.error||'profile_unavailable');
+    if(!profiles.enabled){
+      status.textContent='Ollama im verbundenen Worker nicht aktiviert';
+      return;
+    }
+    if(!list?.ok)throw Error(list?.error||'suggestions_unavailable');
+    const items=Array.isArray(list.items)?list.items:[];
+    status.textContent='Aktives Profil: '+String(profiles.active||'unbekannt')+
+      ' | '+items.length+' gespeicherte Analysen';
+    for(const item of items){
+      if(!item||!Array.isArray(item.commands)||item.review_only!==true)continue;
+      const section=document.createElement('section');
+      section.className='ssh-proposal';
+      const header=document.createElement('h3');
+      header.textContent='Analyse '+String(item.message_id||'').slice(0,12);
+      section.append(header);
+      const details=document.createElement('p');
+      details.textContent='Modell: '+String(item.model||'?')+
+        ' | Risiko: '+String(item.risk||'?')+
+        ' | Ziel: '+String(item.host||'NICHT ZUGEORDNET');
+      section.append(details);
+      const source=document.createElement('p');
+      source.textContent='Chat: '+String(item.conversation_id||'?')+
+        ' | Tab: '+String(item.tab_id??'?');
+      section.append(source);
+      const reason=document.createElement('p');
+      reason.textContent='Begründung (Modellausgabe): '+String(item.reason||'');
+      section.append(reason);
+      const code=document.createElement('pre');
+      code.textContent=item.commands.map((command,i)=>
+        (i+1)+'. '+String(command)
+      ).join('\n\n');
+      section.append(code);
+      const footer=document.createElement('p');
+      footer.textContent='NUR VORSCHAU. Keine Freigabe und keine SSH-Ausführung.';
+      section.append(footer);
+      container.append(section);
+    }
+  }catch(err){
+    status.textContent='Ollama-Vorschau fehlgeschlagen: '+String(err.message||err);
+  }
+}
+byId('ollama-refresh').addEventListener('click',refreshOllama);
+byId('ollama-review').addEventListener('toggle',()=>{
+  if(byId('ollama-review').open)refreshOllama();
+});
+
 function sshNode(tag,text){
   const node=document.createElement(tag);
   if(text!==undefined)node.textContent=String(text);
