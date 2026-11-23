@@ -23,7 +23,7 @@ Die vorhandene LIVE-API bleibt explizit separat und standardmäßig ohne Ollama.
 - Fenced Shell-Codeblöcke werden blockweise, nicht zeilenweise extrahiert. Nicht gefencete Befehle sind noch nicht unterstützt; das vermeidet unsichere Kommandorekonstruktion.
 - Modellbewertung ist keine verlässliche Sicherheitsentscheidung, insbesondere bei Beispieltext. Keine automatische Freigabe in Phase 1.
 - Profilkonfiguration ist vom lokalen Betreiber zu schützen; Profilauswahl über bestehende Token-API beschränkt sich auf bereits konfigurierte Endpunkte.
-- Keine live Ollama-/Windows-/Brave-Tests und keine echten SSH-Verbindungen. Die CI-Ausführung muss nach Repo-Push separat bestätigt werden; Testdateien sind angelegt, aber keine bestandenen Tests behauptet.
+- Keine live Ollama-/Windows-/Brave-Tests und keine echten SSH-Verbindungen. GitHub Actions run 45192345783 auf Commit 9306a64: erfolgreich. Der Job hat sowohl `python -m pytest -q` als auch `node --test tests/*.cjs` erfolgreich abgeschlossen. Ein echter Ollama-/Windows-/Brave-Lauf bleibt offen.
 - WIP in den nächsten Phasen: Profil-/Modellwahl im Panel, Modellabfrage und Verbindungstest, nicht gefencete eindeutige Befehle, robustere Beispiel-/Zitatklassifikation, Ampel-UI und Zielkorrektur, separate Freigabe- und Sudo-Logik.
 
 ## Testbefehle
@@ -33,3 +33,7 @@ py -m pytest -q tests/test_ollama_analysis.py tests/test_live_capture_api.py
 py -m pytest -q
 node --test tests/*.cjs
 ```
+
+## CI-Abnahme
+- [GitHub Actions: Python- und Brave-JavaScript-Regressionen bestanden](https://github.com/Battlecake91/gpt_local_llm_worker/actions/runs/45192345783), Commit `9306a64f15547f0835c0dde99133edb841c2a0b1`.
+- Der vorangehende CI-Lauf `45192260869` war wegen fehlerhafter Escape-Zeichen in einer neuen Test-Fixture fehlgeschlagen. Die Fixture wurde korrigiert und der vollständige nächste Lauf war erfolgreich.
