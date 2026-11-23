@@ -145,3 +145,33 @@ test('hidden duplicate and visible stop are correctly distinguished',()=>{
   }};
   assert.equal(activeStop(doc),visible);
 });
+
+test('paired user request is nearest preceding turn, not an unrelated later turn',()=>{
+  const {ASSISTANT,USER,userPromptBefore}=require('../extension/bridge-core.js');
+  const turn=(role,content)=>({
+    getAttribute:name=>name==='data-message-author-role'?role:null,
+    querySelector:()=>null,innerText:content
+  });
+  const user1=turn('user','NAS Status prüfen'),assistant1=turn('assistant','first');
+  const user2=turn('user','Backup-NAS untersuchen'),assistant2=turn('assistant','second');
+  const later=turn('user','vserver');
+  const doc={querySelectorAll:selector=>selector===`${ASSISTANT},${USER}`?
+    [user1,assistant1,user2,assistant2,later]:[]};
+  assert.equal(userPromptBefore(doc,assistant1),'NAS Status prüfen');
+  assert.equal(userPromptBefore(doc,assistant2),'Backup-NAS untersuchen');
+  assert.equal(userPromptBefore(doc,later),'');
+});
+
+test('missing or oversized user request fails closed to empty context',()=>{
+  const {ASSISTANT,USER,userPromptBefore}=require('../extension/bridge-core.js');
+  const message=(role,text)=>({
+    getAttribute:key=>key==='data-message-author-role'?role:null,
+    querySelector:()=>null,innerText:text
+  });
+  const user=message('user','X'.repeat(8200));
+  const assistant=message('assistant','command');
+  const doc={querySelectorAll:selector=>selector===`${ASSISTANT},${USER}`?[user,assistant]:[]};
+  assert.equal(userPromptBefore(doc,assistant),'');
+  assert.equal(userPromptBefore({querySelectorAll:()=>[]},assistant),'');
+  assert.equal(userPromptBefore(doc,null),'');
+});
