@@ -38,6 +38,7 @@ class Capture(BaseModel):
     conversation_id: str
     tab_id: int
     text: str
+    user_prompt: str = Field(default="", max_length=8192)
     observed_at: str
 
 
@@ -106,7 +107,7 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         analysis = None
         if analyzer is not None:
             try:
-                analysis = analyzer.analyze(payload.text, set(targets))
+                analysis = analyzer.analyze(payload.text, set(targets), payload.user_prompt)
             except (AnalysisError, OSError) as exc:
                 raise HTTPException(503, "Ollama analysis unavailable: " + str(exc)) from exc
 
@@ -119,7 +120,7 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 "FROM live_captures WHERE message_id=?", (payload.message_id,)
             ).fetchone()
             incoming = (payload.conversation_id, payload.tab_id,
-                        hashlib.sha256(payload.text.encode('utf-8')).hexdigest(),
+                        hashlib.sha256((payload.text + ("\0" + payload.user_prompt if payload.user_prompt else "")).encode('utf-8')).hexdigest(),
                         payload.observed_at)
             if old is not None:
                 # observed_at is receipt metadata, not the immutable content.
