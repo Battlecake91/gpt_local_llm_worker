@@ -101,6 +101,38 @@
   chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(msg.type==='SET_CAPTURE'){active=!!msg.enabled;lifecycle.invalidate();makeBaseline();status(active?'IDLE':'DISABLED');reply({ok:true});return;}
     if(msg.type==='GET_TAB_STATE'){reply({ok:true,conversation_id:core.conversation(location.href),state:lifecycle.state});return;}
+    if(msg.type==='CAPTURE_CURRENT_REPLY'){
+      // Operator-initiated recovery for a completed answer missed by the
+      // Stop-button lifecycle. Never claims an interrupted generation finished.
+      (async()=>{
+        const conv=core.conversation(location.href);
+        const node=core.lastAssistant(document);
+        if(!active || !conv || !node || document.querySelector(core.STOP) ||
+           core.lastTurnRole(document)!=='assistant')throw Error('no_completed_assistant_reply');
+        const text=core.readable(node);
+        const nodeId=existingId(node);
+        if(!text.trim())throw Error('empty_reply');
+        // Require that the same message text remains stable before capture.
+        await new Promise(resolve=>setTimeout(resolve,700));
+        const latest=core.lastAssistant(document);
+        if(!active || core.conversation(location.href)!==conv ||
+           document.querySelector(core.STOP) ||
+           core.lastTurnRole(document)!=='assistant' ||
+           latest!==node || existingId(latest)!==nodeId ||
+           core.readable(latest)!==text)throw Error('reply_changed_or_generation_active');
+        const identity=core.messageIdentity(node,text,conv);
+        const message_id=await digest(identity);
+        if(lastProcessed===identity)return {ok:true,status:'already_captured',message_id};
+        const response=await chrome.runtime.sendMessage({type:'CAPTURE',payload:{
+          schema_version:1,message_id,conversation_id:conv,text,
+          observed_at:new Date().toISOString()
+        }});
+        if(!response?.ok)throw Error(response?.error||'capture_not_queued');
+        lastProcessed=identity;
+        return {ok:true,status:'queued',message_id};
+      })().then(reply,e=>reply({ok:false,error:String(e.message||e)}));
+      return true;
+    }
     if(msg.type==='PREVIEW_CURRENT_REPLY'){
       const node=core.lastAssistant(document);
       if(!tabConversation || !node || document.querySelector(core.STOP)){
