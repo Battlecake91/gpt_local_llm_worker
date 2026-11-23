@@ -175,6 +175,18 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     ).then(()=>reply({ok:true})).catch(e=>reply({ok:false,error:String(e)}));
     return true;
   }
+  if(msg.type==='CAPTURE_CURRENT_FROM_PANEL'){
+    if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_capture_sender'});return;}
+    (async()=>{
+      if(!state.captureEnabled)throw Error('capture_disabled');
+      const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+      if(!tab?.id || !tab.url?.startsWith('https://chatgpt.com/c/'))
+        throw Error('active_chatgpt_conversation_required');
+      const result=await chrome.tabs.sendMessage(tab.id,{type:'CAPTURE_CURRENT_REPLY'});
+      reply(result?.ok?result:{ok:false,error:result?.error||'content_script_unavailable'});
+    })().catch(e=>reply({ok:false,error:String(e.message||e)}));
+    return true;
+  }
   if(msg.type==='LIST_SSH_PROPOSALS' || msg.type==='LIST_MOCK_RESULTS' || msg.type==='DECIDE_SSH_PROPOSAL'){
     if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_review_sender'});return;}
     (async()=>{
