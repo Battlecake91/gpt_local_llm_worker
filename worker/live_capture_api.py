@@ -92,7 +92,9 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                         hashlib.sha256(payload.text.encode('utf-8')).hexdigest(),
                         payload.observed_at)
             if old is not None:
-                if old != incoming:
+                # observed_at is receipt metadata, not the immutable content.
+                # A manual re-capture after MV3 restart may have a new time.
+                if old[:3] != incoming[:3]:
                     raise HTTPException(409, "Capture ID collision")
                 return {"message_id": payload.message_id, "status": "duplicate"}
 
