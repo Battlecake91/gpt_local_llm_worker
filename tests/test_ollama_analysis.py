@@ -63,11 +63,62 @@ class OllamaPhase1Tests(unittest.TestCase):
         payload = json.loads(self.requests[0].content)
         self.assertIs(payload["think"], False)
         self.assertEqual(payload["format"]["properties"]["actionable"]["type"], "boolean")
-        self.assertEqual(payload["format"]["properties"]["risk"]["enum"],
+        self.assertEqual(payload["format"]["properties"]["risk"]["anyOf"][0]["enum"],
                          ["green", "yellow", "red"])
+        self.assertEqual(payload["format"]["properties"]["risk"]["anyOf"][1]["type"],
+                         "null")
         self.assertEqual(payload["format"]["properties"]["commands"]["items"]["type"],
                          "string")
         self.assertIn("nas", payload["format"]["properties"]["host"]["anyOf"][0]["enum"])
+
+    def test_classifier_instruction_is_system_role_and_untrusted_text_is_user_role(self):
+        result = self.analyze()
+        self.assertEqual(result.commands, ("zpool status",))
+        body = json.loads(self.requests[0].content)
+        self.assertEqual([message["role"] for message in body["messages"]],
+                         ["system", "user"])
+        self.assertEqual(body["messages"][1]["content"], ANSWER)
+        instruction = body["messages"][0]["content"]
+        self.assertIn("Auf dem NAS prüfen", instruction)
+        self.assertIn("read-only", instruction)
+        self.assertIn("wipefs", instruction)
+        self.assertIn("Examples marked", instruction)
+        self.assertNotIn(ANSWER, instruction)
+
+    def test_nonactionable_reply_may_use_null_risk(self):
+        self.result.update(actionable=False, commands=[], host=None, risk=None)
+        self.assertIsNone(self.analyze(
+            "Beispiel, nicht ausführen:\n\n```bash\nrm -rf /srv/archive\n```"
+        ))
+
+    def test_actionable_null_risk_is_rejected(self):
+        self.result["risk"] = None
+        with self.assertRaisesRegex(AnalysisError, "invalid_risk_value"):
+            self.analyze()
+
+    def test_invalid_reason_is_distinct_from_invalid_risk(self):
+        self.result["reason"] = ""
+        with self.assertRaisesRegex(AnalysisError, "invalid_reason"):
+            self.analyze()
+
+    def test_unsupported_host_in_model_response_is_always_rejected(self):
+        self.result["host"] = "unknown"
+        with self.assertRaisesRegex(AnalysisError, "host_not_allowlisted"):
+            self.analyze()
+
+    def test_conflicting_explicit_hosts_never_result_in_model_picked_target(self):
+        self.result["host"] = "nas"
+        suggestion = self.analyze(
+            "Auf dem NAS und dem Backup-NAS vergleichen:\n"
+            "```bash\nzpool status\n```")
+        self.assertIsNone(suggestion.host)
+        self.assertIsNone(suggestion.batch("x" * 64))
+
+    def test_model_cannot_invent_host_where_source_has_no_target(self):
+        self.result["host"] = "nas"
+        self.assertIsNone(self.analyze(
+            "Auf dem Zielserver ausführen:\n"
+            "```bash\nzpool status\n```").host)
 
     def test_no_shell_block_is_inert_even_if_prose_says_execute(self):
         self.assertIsNone(self.analyze("Auf NAS bitte zpool status ausführen."))
