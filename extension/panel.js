@@ -34,6 +34,20 @@ byId('sync').addEventListener('click',()=>chrome.runtime.sendMessage({type:'SYNC
 
 byId('diagnose').addEventListener('click',()=>chrome.runtime.sendMessage({type:'REFRESH_DIAGNOSTICS'}));
 
+byId('capture-current').addEventListener('click',async()=>{
+  const status=byId('manual-capture-status');
+  const button=byId('capture-current');
+  button.disabled=true;
+  status.textContent='Prüfe stabile letzte Antwort ...';
+  try{
+    const result=await chrome.runtime.sendMessage({type:'CAPTURE_CURRENT_FROM_PANEL'});
+    if(!result?.ok)throw Error(result?.error||'capture_failed');
+    status.textContent=result.status==='already_captured'
+      ?'Bereits erfasst'
+      :'Antwort zur Übertragung eingereiht (Status unter Letzte Übertragung prüfen)';
+  }catch(err){status.textContent='Fehler: '+String(err.message||err);}
+  finally{button.disabled=false;}
+});
 byId('preview-current').addEventListener('click',async()=>{
   const output=byId('preview-result');
   output.textContent='Lese vorhandene Antwort ...';
