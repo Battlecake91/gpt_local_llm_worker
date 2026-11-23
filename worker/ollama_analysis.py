@@ -59,7 +59,7 @@ class ProfileStore:
     def load(self) -> tuple[dict, list[dict]]:
         if self.path.stat().st_size > 32768:
             raise AnalysisError("profiles_too_large")
-        config = json.loads(self.path.read_text(encoding="utf-8"))
+        config = json.loads(self.path.read_text(encoding="utf-8-sig"))
         if not isinstance(config, dict) or set(config) != {"active", "profiles"}:
             raise AnalysisError("invalid_profile_config")
         profiles = config["profiles"]
