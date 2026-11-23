@@ -228,6 +228,76 @@ class OllamaPhase1Tests(unittest.TestCase):
         )
         self.assertEqual(suggestion.commands, ("zpool status", "uptime"))
 
+
+    def test_bare_assistant_code_uses_paired_user_request_without_rewriting(self):
+        reply = "```bash\nsudo zpool status -v storage\n```"
+        self.result["commands"] = ["sudo zpool status -v storage"]
+        self.result["host"] = None
+        suggestion = OllamaAnalyzer(ProfileStore(self.profile_path), self.client()).analyze(
+            reply, {"nas", "backup-nas", "vserver"},
+            "Gib mir einen Shell-Befehl, um auf meinem NAS den ZFS-Pool zu prüfen.")
+        self.assertEqual(suggestion.host, "nas")
+        self.assertEqual(suggestion.commands, ("sudo zpool status -v storage",))
+        api_body = json.loads(self.requests[0].content)
+        supplied = json.loads(api_body["messages"][1]["content"])
+        self.assertEqual(supplied["assistant_reply"], reply)
+        self.assertIn("meinem NAS", supplied["preceding_user_request"])
+        self.assertNotIn("meinem NAS", api_body["messages"][0]["content"])
+
+    def test_prompt_command_can_never_be_extracted_from_assistant_reply(self):
+        self.result["commands"] = ["zpool destroy storage"]
+        with self.assertRaisesRegex(AnalysisError, "command_not_verbatim"):
+            OllamaAnalyzer(ProfileStore(self.profile_path), self.client()).analyze(
+                "```bash\nzpool status\n```", {"nas"},
+                "Auf dem NAS: zpool destroy storage")
+
+    def test_conflicting_prompt_and_assistant_hosts_never_select_target(self):
+        suggestion = OllamaAnalyzer(ProfileStore(self.profile_path), self.client()).analyze(
+            ANSWER, {"nas", "backup-nas", "vserver"},
+            "Auf dem Backup-NAS prüfen.")
+        self.assertIsNone(suggestion.host)
+        self.assertIsNone(suggestion.batch("d" * 64))
+
+    def test_conflicting_hosts_inside_user_prompt_never_select_target(self):
+        suggestion = OllamaAnalyzer(ProfileStore(self.profile_path), self.client()).analyze(
+            "```bash\nzpool status\n```", {"nas", "backup-nas", "vserver"},
+            "Bitte NAS und Backup-NAS vergleichen.")
+        self.assertIsNone(suggestion.host)
+
+    def test_api_binds_user_context_to_capture_identity(self):
+        targets = self.root / "targets-context.json"
+        targets.write_text(json.dumps([{
+            "host_id": "nas", "hostname": "fixture.example.invalid",
+            "port": 22, "username": "fixture", "host_public_key": KEY,
+        }]), encoding="utf-8")
+        db = self.root / "context.sqlite3"
+        reply = "```bash\nzpool status\n```"
+        self.result["host"] = None
+        with self.client() as fake:
+            app = create_app(db_path=db, targets_path=targets, token=TOKEN,
+                             extension_origin=ORIGIN, ollama_profiles=self.profile_path,
+                             ollama_client=fake)
+            with TestClient(app) as api:
+                payload = {
+                    "schema_version": 1,
+                    "message_id": hashlib.sha256(reply.encode()).hexdigest(),
+                    "conversation_id": "chat-123", "tab_id": 19, "text": reply,
+                    "user_prompt": "Auf dem NAS ausführen.",
+                    "observed_at": "2026-11-23T18:00:00Z",
+                }
+                headers = {"Authorization": "Bearer " + TOKEN}
+                accepted = api.post("/api/bridge/v1/captures", json=payload, headers=headers)
+                self.assertEqual(accepted.status_code, 200, accepted.text)
+                suggestion = api.get("/api/bridge/v1/ollama/suggestions", headers=headers).json()
+                self.assertEqual(suggestion["items"][0]["host"], "nas")
+                self.assertTrue(suggestion["items"][0]["review_only"])
+                self.assertEqual(
+                    api.post("/api/bridge/v1/captures",
+                             json={**payload, "user_prompt": "Auf dem Backup-NAS ausführen."},
+                             headers=headers).status_code, 409)
+                self.assertEqual(api.get("/api/bridge/v1/outbound",
+                                         headers=headers).json(), {"items": []})
+
     def test_api_persists_review_only_suggestion_and_no_execution(self):
         targets = self.root / "targets.json"
         targets.write_text(json.dumps([{
