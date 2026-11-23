@@ -254,10 +254,10 @@ class OllamaAnalyzer:
         # an explicit destination. Text inside command blocks is untrusted data.
         preface = text
         positions = [m.start() for m in FENCE.finditer(text)]
-        positions += [m.start() for m in PROMPT_LINE.finditer(FENCE.sub("", text))]
+        positions += [m.start() for m in PROMPT_LINE.finditer(text)]
         if positions:
             # Fenced source begins at its actual source offset.
-            preface = text[:min(positions)] if FENCE.search(text) else text[:min(positions)]
+            preface = text[:min(positions)]
         stated_host = explicit_host(preface, allowed_hosts)
         if stated_host is not None:
             if host is None:
