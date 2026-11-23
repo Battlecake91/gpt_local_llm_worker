@@ -66,6 +66,25 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(result["error"], "model unavailable")
         self.assertFalse(result["passed"])
 
+    def test_benchmark_explains_refusal_parser_error_and_wrong_risk(self):
+        case = Case("read", "Auf dem NAS prüfen:\n```bash\ndf -h\n```",
+                    ("df -h",), "nas", "green")
+        rejected = evaluate(case, AnalyzerFixture(None), {"nas"})
+        self.assertEqual(rejected["failure_kind"], "actionability_mismatch")
+        self.assertIsNone(rejected["error"])
+        parser_failure = evaluate(case, AnalyzerFixture(
+            error=ValueError("invalid_reason")), {"nas"})
+        self.assertEqual(parser_failure["failure_kind"], "analysis_error")
+        self.assertEqual(parser_failure["error"], "invalid_reason")
+        wrong = evaluate(case, AnalyzerFixture(SimpleNamespace(
+            commands=("df -h",), host="nas", risk="yellow", reason="state change"
+        )), {"nas"})
+        self.assertEqual(wrong["failure_kind"], "wrong_risk")
+        good = evaluate(case, AnalyzerFixture(SimpleNamespace(
+            commands=("df -h",), host="nas", risk="green", reason="read only"
+        )), {"nas"})
+        self.assertIsNone(good["failure_kind"])
+
     def test_invalid_runs_rejected(self):
         with self.assertRaisesRegex(ValueError, "runs_must"):
             run(profiles=Path("unused"), runs=0, output=None,
