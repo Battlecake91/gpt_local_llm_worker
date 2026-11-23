@@ -138,6 +138,26 @@ async function cycle(){
 }
 // Only our own extension page may request user approval decisions.
 // A ChatGPT content script never receives approval authority.
+// Explicitly target a ChatGPT conversation, never an arbitrary browser tab.
+// The side panel's currentWindow does not always resolve to its content window.
+function conversationFromUrl(url){
+  try{
+    const u=new URL(url);
+    if(u.origin!=='https://chatgpt.com')return null;
+    const match=u.pathname.match(/^(?:\\/c|\\/g\\/g-p-[A-Za-z0-9-]+\\/c)\\/([A-Za-z0-9-]+)\\/?$/);
+    return match?match[1]:null;
+  }catch{return null;}
+}
+async function activeConversationTab(){
+  const current=await chrome.tabs.query({active:true,currentWindow:true});
+  const direct=current.find(tab=>Number.isInteger(tab.id)&&conversationFromUrl(tab.url));
+  if(direct)return direct;
+  const all=await chrome.tabs.query({url:'https://chatgpt.com/*'});
+  const eligible=all.filter(tab=>Number.isInteger(tab.id)&&conversationFromUrl(tab.url));
+  // A background tab is safe to use only if exactly one candidate exists.
+  if(eligible.length===1)return eligible[0];
+  throw Error(eligible.length?'multiple_chatgpt_conversations_open':'active_chatgpt_conversation_required');
+}
 function trustedPanel(sender){
   return !sender.tab && sender.url===chrome.runtime.getURL('panel.html');
 }
@@ -179,9 +199,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_capture_sender'});return;}
     (async()=>{
       if(!state.captureEnabled)throw Error('capture_disabled');
-      const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-      if(!tab?.id || !tab.url?.startsWith('https://chatgpt.com/c/'))
-        throw Error('active_chatgpt_conversation_required');
+      const tab=await activeConversationTab();
       const result=await chrome.tabs.sendMessage(tab.id,{type:'CAPTURE_CURRENT_REPLY'});
       reply(result?.ok?result:{ok:false,error:result?.error||'content_script_unavailable'});
     })().catch(e=>reply({ok:false,error:String(e.message||e)}));
