@@ -34,13 +34,56 @@ byId('sync').addEventListener('click',()=>chrome.runtime.sendMessage({type:'SYNC
 
 byId('diagnose').addEventListener('click',()=>chrome.runtime.sendMessage({type:'REFRESH_DIAGNOSTICS'}));
 
+let chatTabChoices=new Map();
+async function refreshChatTabs(){
+  const select=byId('capture-tab'),status=byId('tab-selection-status');
+  const previous=select.value;
+  status.textContent='Suche ChatGPT-Konversationen ...';
+  try{
+    const response=await chrome.runtime.sendMessage({type:'LIST_CHATGPT_TABS'});
+    if(!response?.ok)throw Error(response?.error||'tab_lookup_failed');
+    const items=Array.isArray(response.items)?response.items:[];
+    chatTabChoices=new Map();
+    select.replaceChildren();
+    const placeholder=document.createElement('option');
+    placeholder.value='';placeholder.textContent='ChatGPT-Konversation auswählen';
+    select.append(placeholder);
+    for(const tab of items){
+      if(!Number.isSafeInteger(tab.tab_id)||typeof tab.conversation_id!=='string')continue;
+      const key=String(tab.tab_id);
+      chatTabChoices.set(key,{tab_id:tab.tab_id,conversation_id:tab.conversation_id});
+      const option=document.createElement('option');
+      option.value=key;
+      option.textContent=(tab.active?'[Aktiv] ':'')+
+        String(tab.title||'ChatGPT').slice(0,100)+' (Tab '+key+')';
+      select.append(option);
+    }
+    if(chatTabChoices.has(previous))select.value=previous;
+    else if(items.length===1 && chatTabChoices.size===1)select.value=String(items[0].tab_id);
+    else select.value='';
+    status.textContent=chatTabChoices.size+' Konversationen gefunden';
+  }catch(err){
+    chatTabChoices.clear();
+    select.replaceChildren();
+    status.textContent='Tab-Abfrage fehlgeschlagen: '+String(err.message||err);
+  }
+}
+function selectedChat(){
+  const key=byId('capture-tab').value;
+  const selection=chatTabChoices.get(key);
+  if(!selection)throw Error('Bitte zuerst einen ChatGPT-Tab auswaehlen');
+  return selection;
+}
+byId('refresh-tabs').addEventListener('click',refreshChatTabs);
+refreshChatTabs();
+
 byId('capture-current').addEventListener('click',async()=>{
   const status=byId('manual-capture-status');
   const button=byId('capture-current');
   button.disabled=true;
   status.textContent='Prüfe stabile letzte Antwort ...';
   try{
-    const result=await chrome.runtime.sendMessage({type:'CAPTURE_CURRENT_FROM_PANEL'});
+    const result=await chrome.runtime.sendMessage({type:'CAPTURE_CURRENT_FROM_PANEL',...selectedChat()});
     if(!result?.ok)throw Error(result?.error||'capture_failed');
     status.textContent=result.status==='already_captured'
       ?'Bereits erfasst'
@@ -52,11 +95,9 @@ byId('preview-current').addEventListener('click',async()=>{
   const output=byId('preview-result');
   output.textContent='Lese vorhandene Antwort ...';
   try{
-    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-    if(!tab?.id || !tab.url?.startsWith('https://chatgpt.com/c/')){
-      output.textContent='Kein aktiver ChatGPT-Konversationstab';return;
-    }
-    const result=await chrome.tabs.sendMessage(tab.id,{type:'PREVIEW_CURRENT_REPLY'});
+    const result=await chrome.runtime.sendMessage({
+      type:'PREVIEW_SELECTED_REPLY',...selectedChat()
+    });
     if(!result?.ok){output.textContent='Fehler: '+(result?.error||'unbekannt');return;}
     output.textContent='Zeichen: '+result.length+' | Zeilenumbrüche: '+result.newlineCount+
       ' | Codeblöcke: '+result.codeBlocks+
