@@ -151,7 +151,8 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       truncated:msg.payload.text.length>8000,
       at:new Date().toISOString()
     };broadcast();
-    submitCapture(msg.payload,sender.tab.id).catch(e=>{state.error=String(e);broadcast();});return;
+    submitCapture(msg.payload,sender.tab.id).catch(e=>{state.error=String(e);broadcast();});
+    reply({ok:true,status:'queued'});return;
   }
   if(msg.type==='OBSERVED_STATE'){
     if(sender.tab?.id!=null)state.tabs[sender.tab.id]={
