@@ -22,9 +22,9 @@ MAX_TEXT = 256_000
 # This is a deliberately narrow source-text resolver, not an LLM override.
 # Inspect only instructions preceding the first eligible command span.
 _HOST_MENTIONS = (
-    ("backup-nas", re.compile(r"(?i)(?<![\\w-])(?:backup[- ]nas|backup[- ]server)(?![\\w-])")),
-    ("vserver", re.compile(r"(?i)(?<![\\w-])(?:vserver|v[- ]server)(?![\\w-])")),
-    ("nas", re.compile(r"(?i)(?<![\\w-])nas(?![\\w-])")),
+    ("backup-nas", re.compile(r"(?i)(?<![\w-])(?:backup[- ]nas|backup[- ]server)(?![\w-])")),
+    ("vserver", re.compile(r"(?i)(?<![\w-])(?:vserver|v[- ]server)(?![\w-])")),
+    ("nas", re.compile(r"(?i)(?<![\w-])nas(?![\w-])")),
 )
 
 
