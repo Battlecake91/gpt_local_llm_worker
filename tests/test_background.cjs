@@ -181,3 +181,16 @@ test('401 rejection stops capture storm, persists queue and resumes after new to
   assert.equal(h.store.get('pendingCaptures').length,0);
   assert.equal(h.calls.filter(x=>x.url.endsWith('/captures')).length,3);
 });
+
+test('manual capture requires trusted panel and delegates only to active ChatGPT tab',async()=>{
+  const h=harness({initialStore:{workerBearerToken:'test'}});
+  const untrusted=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL'},
+    {tab:{id:1},url:'https://chatgpt.com/c/abc'});
+  assert.equal(untrusted.ok,false);
+  assert.equal(untrusted.error,'untrusted_capture_sender');
+  assert.equal(h.sent.filter(x=>x.type==='CAPTURE_CURRENT_REPLY').length,0);
+  const trusted=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL'},
+    {url:'chrome-extension://testid/panel.html'});
+  assert.equal(trusted.ok,true);
+  assert.equal(h.sent.filter(x=>x.type==='CAPTURE_CURRENT_REPLY').length,1);
+});
