@@ -93,3 +93,9 @@ node --test tests/*.cjs
 - Reparatur expliziter Host-Aliasgrenzen: `[\\w-]` statt fehlerhaft doppelt escaptem Word-Character-Pattern. Regressionen für zusammengesetzte Namen und getrenntes Backup-NAS.
 - Historische Antworten können nicht nachträglich klassifiziert werden, da die vollständigen Texte absichtlich nicht in der SQLite gehalten werden. **Für die Live-Abnahme muss nach Worker-Neustart und Extension-Reload ein neuer ChatGPT-Turn mit neuem `message_id` erzeugt werden.**
 - Nachweisbare funktionale Verifikation: GitHub-Actions Python/Node-Tests; realer Windows-Brave- und qwen3.5:4b-Test mit gepaarter Benutzerfrage noch offen. Kein SSH, Auto-Approval oder Auto-Send.
+
+## Diagnose nach realem Windows-Ollama-Test (2026-11-23)
+- Operator bestätigt: `live_captures=4`, `ollama_suggestions=0`, `live_proposals=0`. Direkter Ollama-API-Aufruf mit `qwen3.5:4b` erfolgreich (`{"status":"ready"}`, 0,13 s). Damit ist der lokale Modellserver grundsätzlich funktionsfähig; die konkreten Capture-Klassifikationen bleiben unklar.
+- Neue `ollama_diagnostics`-Tabelle speichert für künftige Captures nur Message-ID, Chat-/Tab-ID, Diagnosezustand (`no_shell_blocks`, `classified_nonactionable`, `target_unresolved`, `proposal_ready`), Boolean `user_prompt_present`, Zahl der erkannten Shell-Blöcke und Modellname. Keine Prompttexte, Assistant-Antworten, Tokens oder rohe Qwen-Ausgaben.
+- Neue durch Bearer-Token geschützte read-only API `GET /api/bridge/v1/ollama/diagnostics`, maximal 20 neueste Ergebnisse. Alt-Captures werden nicht rückwirkend rekonstruiert.
+- Mit diesen Metadaten lässt sich bei der nächsten neuen Capture eindeutig unterscheiden, ob der DOM-Reader keinen Codeblock übertrug, die Userfrage nicht zugeordnet wurde oder die Klassifikation den Befehl ablehnte.
