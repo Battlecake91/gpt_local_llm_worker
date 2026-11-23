@@ -43,7 +43,7 @@ def _unpack(text: str) -> object:
     if len(candidates) > 1:
         raise InvalidSSHRequest("ambiguous_json_blocks")
     if candidates:
-        text = candidates[0]
+        text = candidates[0][1]
 
     def no_duplicates(pairs: list[tuple[str, object]]) -> dict:
         obj = {}
