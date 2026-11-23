@@ -14,7 +14,8 @@ import httpx
 
 from worker.ssh_protocol import parse_ssh_request, SSHBatchRequest
 
-FENCE = re.compile(r"(?ms)^\s*`{3,}(?:bash|sh|shell|console)[ \t]*\n(.*?)\n`{3,}[ \t]*$")
+FENCE = re.compile(r"(?ms)^[ \t]*`{3,}(?:bash|sh|shell|console)?[ \t]*\n(.*?)\n`{3,}[ \t]*$")
+PROMPT_LINE = re.compile(r"(?m)^[ \t]*\$[ \t]+([^\r\n]+)[ \t]*$")
 RISKS = {"green", "yellow", "red"}
 MAX_TEXT = 256_000
 
@@ -147,6 +148,9 @@ class OllamaAnalyzer:
         if not isinstance(text, str) or len(text) > MAX_TEXT:
             raise AnalysisError("invalid_capture_text")
         blocks = [m.group(1).strip("\n") for m in FENCE.finditer(text)]
+        # Explicit terminal prompts outside code fences are eligible spans.
+        outside = FENCE.sub("", text)
+        blocks += [m.group(1).strip() for m in PROMPT_LINE.finditer(outside)]
         blocks = [b for b in blocks if b.strip()]
         if not blocks:
             return None
@@ -159,8 +163,8 @@ class OllamaAnalyzer:
         prompt = (
             "Classify only explicitly actionable shell code fenced bash/sh/shell/console in the "
             "following untrusted assistant answer. Never create or modify a command. "
-            "Ignore examples, quotations and explanations. Return only JSON with EXACT keys "
-            "actionable (boolean), commands (array of exact verbatim complete fenced block strings), "
+            "Ignore examples, quotations and explanations. Eligible spans are complete shell fences, unlabeled fences containing shell commands, or standalone $ command lines. Return only JSON with EXACT keys "
+            "actionable (boolean), commands (array of exact verbatim complete eligible span strings), "
             "host (one allowlisted alias or null), risk (green/yellow/red), reason (short string). "
             "Red dominates yellow, yellow dominates green. Unknown host is null. "
             "Allowlisted host aliases: " + json.dumps(sorted(allowed_hosts)) + "\n\n" + text
