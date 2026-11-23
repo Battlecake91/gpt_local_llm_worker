@@ -47,6 +47,22 @@ class SSHProtocolTests(unittest.TestCase):
         item = self.parse("SSH-Auftrag:\n```json\n" + request() + "\n```\nNur nach Freigabe.")
         self.assertEqual(len(item.commands), 2)
 
+    def test_brave_unlabeled_fenced_json_with_surrounding_text(self):
+        text = (
+            "Die Erweiterung soll diesen Auftrag speichern.\n\n"
+            + "```\n" + request() + "\n```\n\n"
+            + "Nur nach Freigabe ausfuehren."
+        )
+        proposal = self.parse(text)
+        self.assertEqual(proposal.request_id, "req-42")
+        self.assertEqual(proposal.host_id, "lab-nas")
+
+    def test_reject_multiple_unlabeled_json_blocks(self):
+        text = ("```\n" + request() + "\n```\n"
+                + "```\n" + request() + "\n```")
+        with self.assertRaisesRegex(InvalidSSHRequest, "ambiguous_json_blocks"):
+            self.parse(text)
+
     def test_reject_unknown_host_and_bad_cwd(self):
         with self.assertRaisesRegex(InvalidSSHRequest, "host_not_allowlisted"):
             self.parse(request(host="unbekannt"))
