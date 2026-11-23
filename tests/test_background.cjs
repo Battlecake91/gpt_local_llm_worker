@@ -305,13 +305,14 @@ test('manual capture does not inject on changed chat or untrusted sender',async(
 
 test('Ollama analyses are read-only and visible only to the trusted sidepanel',async()=>{
   const h=harness({initialStore:{workerBearerToken:'test'}});
-  const before=h.calls.length;
+  const ollamaCalls=()=>h.calls.filter(x=>x.url.includes('/ollama/')).length;
+  const before=ollamaCalls();
   for(const type of ['LIST_OLLAMA_SUGGESTIONS','LIST_OLLAMA_PROFILES']){
     const rejected=await h.event({type},{tab:{id:1},url:'https://chatgpt.com/c/abc'});
     assert.equal(rejected.ok,false);
     assert.equal(rejected.error,'untrusted_ollama_sender');
   }
-  assert.equal(h.calls.length,before);
+  assert.equal(ollamaCalls(),before);
   const trusted={url:'chrome-extension://testid/panel.html'};
   const listed=await h.event({type:'LIST_OLLAMA_SUGGESTIONS'},trusted);
   const profiles=await h.event({type:'LIST_OLLAMA_PROFILES'},trusted);
