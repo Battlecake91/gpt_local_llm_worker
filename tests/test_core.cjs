@@ -87,3 +87,9 @@ test('German Stoppen control from Windows Brave trace drives generation completi
   assert.equal(life.state,STATES.COMPLETED);
   assert.equal(out[0].text,'Codeblock\\nprint(123)\\nMehrzeilige Erklärung');
 });
+
+test('project-scoped ChatGPT conversation URL is recognized',()=>{
+  assert.equal(conversation('https://chatgpt.com/g/g-p-workspace-123/c/abc-123'),'abc-123');
+  assert.equal(conversation('https://chatgpt.com/g/g-p-workspace-123/c/abc-123?x=1'),'abc-123');
+  assert.equal(conversation('https://chatgpt.com/g/g-p-workspace-123'),null);
+});
