@@ -95,7 +95,7 @@
   function queueScan(){if(scanPending)return;scanPending=true;queueMicrotask(()=>{scanPending=false;scan();});}
   makeBaseline();
   observer=new MutationObserver(queueScan);
-  observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-label','data-testid','data-message-author-role']});
+  observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-label','data-testid','data-message-author-role','class','style','hidden','aria-hidden','aria-disabled','disabled']});
   window.addEventListener('popstate',queueScan);
   window.addEventListener('hashchange',queueScan);
   document.addEventListener('visibilitychange',queueScan);
