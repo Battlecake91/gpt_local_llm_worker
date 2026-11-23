@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from worker.live_approval import LiveApprovalLedger
 from worker.operator_review_gui import load_local_targets
 from worker.ssh_protocol import InvalidSSHRequest, parse_ssh_request
+from worker.ollama_analysis import OllamaAnalyzer, ProfileStore, AnalysisError
 
 MAX_CAPTURE_TEXT = 256_000
 MAX_CONVERSATION_ID = 256
@@ -37,7 +38,8 @@ class Capture(BaseModel):
 
 
 def create_app(*, db_path: Path, targets_path: Path, token: str,
-               extension_origin: str) -> FastAPI:
+               extension_origin: str, ollama_profiles: Path | None = None,
+               ollama_client=None) -> FastAPI:
     """Construct a separately configured instance; never auto-enable from mock."""
     if not db_path.is_absolute() or db_path.is_symlink() or not db_path.parent.is_dir():
         raise ValueError("invalid_live_db_path")
@@ -49,6 +51,9 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         raise ValueError("explicit_extension_origin_required")
 
     targets = load_local_targets(targets_path)
+    analyzer = OllamaAnalyzer(ProfileStore(ollama_profiles), ollama_client) if ollama_profiles else None
+    if analyzer is not None:
+        analyzer.profiles.load()  # Fail closed on malformed administrator configuration.
     ledger = LiveApprovalLedger(db_path)
     with closing(sqlite3.connect(db_path)) as connection, connection:
         connection.execute("""
@@ -58,6 +63,18 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 tab_id INTEGER NOT NULL,
                 text_sha256 TEXT NOT NULL,
                 observed_at TEXT NOT NULL
+            )
+        """)
+
+    with closing(sqlite3.connect(db_path)) as connection, connection:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS ollama_suggestions (
+                message_id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                tab_id INTEGER NOT NULL,
+                analysis_json TEXT NOT NULL,
+                source_sha256 TEXT NOT NULL,
+                FOREIGN KEY(message_id) REFERENCES live_captures(message_id)
             )
         """)
 
@@ -80,6 +97,15 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 not payload.observed_at or len(payload.observed_at) > 128):
             raise HTTPException(422, "Invalid capture")
 
+        # Classification is advisory only. Nothing here grants execution.
+        # Analyze outside SQLite's write transaction, so Ollama cannot block other writes.
+        analysis = None
+        if analyzer is not None:
+            try:
+                analysis = analyzer.analyze(payload.text, set(targets))
+            except (AnalysisError, OSError) as exc:
+                raise HTTPException(503, "Ollama analysis unavailable: " + str(exc)) from exc
+
         # Capture dedup and LIVE proposal commit in one SQLite transaction.
         with ledger._connect() as conn:
             # Serialize concurrent retries before checking either identity.
@@ -98,10 +124,13 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                     raise HTTPException(409, "Capture ID collision")
                 return {"message_id": payload.message_id, "status": "duplicate"}
 
-            try:
-                proposal = parse_ssh_request(payload.text, set(targets))
-            except InvalidSSHRequest:
-                proposal = None
+            if analyzer is not None:
+                proposal = analysis.batch(payload.message_id) if analysis else None
+            else:
+                try:
+                    proposal = parse_ssh_request(payload.text, set(targets))
+                except InvalidSSHRequest:
+                    proposal = None
             if proposal is not None:
                 target = targets[proposal.host_id]
                 data = json.dumps({
@@ -133,7 +162,42 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 "(message_id,conversation_id,tab_id,text_sha256,observed_at) "
                 "VALUES (?,?,?,?,?)",
                 (payload.message_id, *incoming))
+            if analysis is not None:
+                conn.execute(
+                    "INSERT INTO ollama_suggestions "
+                    "(message_id,conversation_id,tab_id,analysis_json,source_sha256) "
+                    "VALUES (?,?,?,?,?)",
+                    (payload.message_id, payload.conversation_id, payload.tab_id,
+                     json.dumps({
+                         "commands": analysis.commands, "host": analysis.host,
+                         "risk": analysis.risk, "reason": analysis.reason,
+                         "model": analysis.model, "review_only": True,
+                     }, ensure_ascii=False), incoming[2]))
         return {"message_id": payload.message_id, "status": "accepted"}
+
+    @app.get("/api/bridge/v1/ollama/profiles", dependencies=[Depends(require_token)])
+    def list_ollama_profiles():
+        if analyzer is None:
+            return {"enabled": False, "profiles": [], "active": None}
+        try:
+            active, profiles = analyzer.profiles.load()
+        except (AnalysisError, OSError, ValueError) as exc:
+            raise HTTPException(503, "Invalid Ollama configuration") from exc
+        return {"enabled": True, "profiles": [
+            {"name": p["name"], "model": p["model"], "url": p["url"]}
+            for p in profiles], "active": active["name"]}
+
+    @app.get("/api/bridge/v1/ollama/suggestions", dependencies=[Depends(require_token)])
+    def list_ollama_suggestions():
+        with ledger._connect() as conn:
+            rows = conn.execute(
+                "SELECT message_id,conversation_id,tab_id,analysis_json "
+                "FROM ollama_suggestions ORDER BY rowid DESC LIMIT 50"
+            ).fetchall()
+        return {"items": [
+            {"message_id": row[0], "conversation_id": row[1], "tab_id": row[2],
+             **json.loads(row[3])} for row in rows
+        ]}
 
     @app.get("/api/bridge/v1/ssh/proposals", dependencies=[Depends(require_token)])
     def mock_panel_proposals():
@@ -161,12 +225,15 @@ def main():
     parser.add_argument("--targets", required=True, type=Path)
     parser.add_argument("--extension-origin", required=True)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--ollama-profiles", type=Path, default=None,
+                        help="Opt-in JSON configuration for verbatim Ollama analysis")
     args = parser.parse_args()
     # Credential must come from an intentionally supplied local environment,
     # never the mock backend's fixed known token.
     token = os.environ.get("BRIDGE_LIVE_TOKEN", "")
     application = create_app(db_path=args.db, targets_path=args.targets,
-                             token=token, extension_origin=args.extension_origin)
+                             token=token, extension_origin=args.extension_origin,
+                             ollama_profiles=args.ollama_profiles)
     print("LIVE proposal intake: approval, SSH and outbound sending DISABLED")
     uvicorn.run(application, host="127.0.0.1", port=args.port)
 
