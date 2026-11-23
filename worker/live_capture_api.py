@@ -6,17 +6,19 @@ outbound, SSH command execution, or browser auto-send capabilities.
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from dataclasses import asdict
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from worker.live_approval import LiveApprovalLedger, LiveAuthorizationError
+from worker.live_approval import LiveApprovalLedger
 from worker.operator_review_gui import load_local_targets
 from worker.ssh_protocol import InvalidSSHRequest, parse_ssh_request
 
@@ -77,8 +79,7 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 not payload.observed_at or len(payload.observed_at) > 128):
             raise HTTPException(422, "Invalid capture")
 
-        # Serialize all capture decisions and LIVE inserts through one SQLite
-        # writer transaction. Proposal and deduplication persist together.
+        # Capture dedup and LIVE proposal commit in one SQLite transaction.
         with ledger._connect() as conn:
             old = conn.execute(
                 "SELECT conversation_id, tab_id, text, observed_at "
@@ -97,15 +98,30 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 proposal = None
             if proposal is not None:
                 target = targets[proposal.host_id]
-                # Ledger's propose() has its own transaction. This call uses
-                # a separate connection; an interrupted request can leave a
-                # proposal without a dedup record, but never lose the proposal.
-                try:
-                    ledger.propose(
-                        proposal, target, tab_id=payload.tab_id,
-                        conversation_id=payload.conversation_id)
-                except LiveAuthorizationError as exc:
-                    raise HTTPException(409, "LIVE proposal collision") from exc
+                data = json.dumps({
+                    "request_id": proposal.request_id,
+                    "host_id": proposal.host_id,
+                    "working_directory": proposal.working_directory,
+                    "description": proposal.description,
+                    "commands": [asdict(command) for command in proposal.commands],
+                }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                target_digest = target.digest()
+                values = (
+                    proposal.command_sha256, proposal.host_id, target_digest,
+                    data, payload.conversation_id, payload.tab_id)
+                existing = conn.execute(
+                    "SELECT command_sha256,host_id,target_digest,proposal_json,"
+                    "conversation_id,tab_id FROM live_proposals WHERE request_id=?",
+                    (proposal.request_id,)).fetchone()
+                if existing is not None and existing != values:
+                    raise HTTPException(409, "LIVE proposal collision")
+                if existing is None:
+                    conn.execute(
+                        "INSERT INTO live_proposals "
+                        "(request_id,command_sha256,host_id,target_digest,"
+                        "proposal_json,conversation_id,tab_id,status) "
+                        "VALUES (?,?,?,?,?,?,?,'PROPOSED')",
+                        (proposal.request_id, *values))
             conn.execute(
                 "INSERT INTO live_captures "
                 "(message_id,conversation_id,tab_id,text,observed_at) "
