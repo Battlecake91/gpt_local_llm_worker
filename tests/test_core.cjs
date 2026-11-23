@@ -93,3 +93,55 @@ test('project-scoped ChatGPT conversation URL is recognized',()=>{
   assert.equal(conversation('https://chatgpt.com/g/g-p-workspace-123/c/abc-123?x=1'),'abc-123');
   assert.equal(conversation('https://chatgpt.com/g/g-p-workspace-123'),null);
 });
+
+test('hidden stop button cannot keep a finished answer in GENERATING',()=>{
+  const {activeStop}=require('../extension/bridge-core.js');
+  const hidden={
+    hidden:false,disabled:false,
+    getAttribute:()=>null,closest:()=>null,
+    getClientRects:()=>[],
+  };
+  const doc={querySelectorAll:()=>[hidden],defaultView:{
+    getComputedStyle:()=>({display:'block',visibility:'visible'})
+  }};
+  assert.equal(activeStop(doc),null);
+  const {t,out,life}=setup();
+  const node=fixture('Final answer');
+  observe(life,true,'Initial response',node);
+  life.observe({stop:!!activeStop(doc),conv,node,text:'Final answer',role:'assistant'});
+  t.advance(100);
+  assert.equal(life.state,STATES.COMPLETED);
+  assert.equal(out.length,1);
+});
+
+test('visible stop button still prevents capture while generating',()=>{
+  const {activeStop}=require('../extension/bridge-core.js');
+  const visible={
+    hidden:false,disabled:false,
+    getAttribute:()=>null,closest:()=>null,
+    getClientRects:()=>[{}],
+  };
+  const doc={querySelectorAll:()=>[visible],defaultView:{
+    getComputedStyle:()=>({display:'block',visibility:'visible'})
+  }};
+  assert.equal(activeStop(doc),visible);
+  const {t,out,life}=setup();
+  const node=fixture('Still streaming');
+  life.observe({stop:!!activeStop(doc),conv,node,text:'Still streaming',role:'assistant'});
+  t.advance(1000);
+  assert.equal(life.state,STATES.GENERATING);
+  assert.equal(out.length,0);
+});
+
+test('hidden duplicate and visible stop are correctly distinguished',()=>{
+  const {activeStop}=require('../extension/bridge-core.js');
+  const make=visible=>({
+    hidden:false,disabled:false,getAttribute:()=>null,closest:()=>null,
+    getClientRects:()=>visible?[{}]:[]
+  });
+  const hidden=make(false),visible=make(true);
+  const doc={querySelectorAll:()=>[hidden,visible],defaultView:{
+    getComputedStyle:()=>({display:'block',visibility:'visible'})
+  }};
+  assert.equal(activeStop(doc),visible);
+});
