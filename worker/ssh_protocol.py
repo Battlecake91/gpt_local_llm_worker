@@ -12,7 +12,7 @@ MAX_COMMAND_SIZE = 8_192
 MAX_TIMEOUT_SECONDS = 300
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
 HOST_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
-FENCE_PATTERN = re.compile(r"(?ms)^```json[ \t]*\n(.*?)\n```[ \t]*$")
+FENCE_PATTERN = re.compile(r"(?ms)^(`{3,})(?:json)?[ \t]*\n(.*?)\n\1[ \t]*$")
 
 
 class InvalidSSHRequest(ValueError):
