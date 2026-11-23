@@ -6,6 +6,7 @@ outbound, SSH command execution, or browser auto-send capabilities.
 from __future__ import annotations
 
 import hmac
+import hashlib
 import json
 import os
 import re
@@ -55,7 +56,7 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                 message_id TEXT PRIMARY KEY,
                 conversation_id TEXT NOT NULL,
                 tab_id INTEGER NOT NULL,
-                text TEXT NOT NULL,
+                text_sha256 TEXT NOT NULL,
                 observed_at TEXT NOT NULL
             )
         """)
@@ -82,11 +83,12 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         # Capture dedup and LIVE proposal commit in one SQLite transaction.
         with ledger._connect() as conn:
             old = conn.execute(
-                "SELECT conversation_id, tab_id, text, observed_at "
+                "SELECT conversation_id, tab_id, text_sha256, observed_at "
                 "FROM live_captures WHERE message_id=?", (payload.message_id,)
             ).fetchone()
             incoming = (payload.conversation_id, payload.tab_id,
-                        payload.text, payload.observed_at)
+                        hashlib.sha256(payload.text.encode('utf-8')).hexdigest(),
+                        payload.observed_at)
             if old is not None:
                 if old != incoming:
                     raise HTTPException(409, "Capture ID collision")
@@ -124,7 +126,7 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
                         (proposal.request_id, *values))
             conn.execute(
                 "INSERT INTO live_captures "
-                "(message_id,conversation_id,tab_id,text,observed_at) "
+                "(message_id,conversation_id,tab_id,text_sha256,observed_at) "
                 "VALUES (?,?,?,?,?)",
                 (payload.message_id, *incoming))
         return {"message_id": payload.message_id, "status": "accepted"}
