@@ -121,8 +121,8 @@ class OllamaPhase1Tests(unittest.TestCase):
     def test_multiple_complete_blocks_are_kept_separate(self):
         self.result["commands"] = ["zpool status", "uptime"]
         suggestion = self.analyze(
-            "Auf dem NAS ausführen:\\n\\n```bash\\nzpool status\\n```\\n"
-            "\\n```bash\\nuptime\\n```"
+            "Auf dem NAS ausführen:\n\n```bash\nzpool status\n```\n"
+            "\n```bash\nuptime\n```"
         )
         self.assertEqual(suggestion.commands, ("zpool status", "uptime"))
 
