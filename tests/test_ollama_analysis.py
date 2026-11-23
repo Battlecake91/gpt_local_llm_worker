@@ -65,6 +65,16 @@ class OllamaPhase1Tests(unittest.TestCase):
         self.assertIsNone(self.analyze("Auf NAS bitte zpool status ausführen."))
         self.assertEqual(self.requests, [])
 
+    def test_unlabeled_shell_fence_is_extracted(self):
+        self.assertEqual(self.analyze(
+            "Auf dem NAS ausführen:\\n```\\nzpool status\\n```"
+        ).commands, ("zpool status",))
+
+    def test_explicit_terminal_prompt_without_fence(self):
+        self.assertEqual(self.analyze(
+            "Auf dem NAS ausführen:\\n$ zpool status"
+        ).commands, ("zpool status",))
+
     def test_hallucinated_modified_command_is_rejected(self):
         self.result["commands"] = ["zpool destroy storage"]
         with self.assertRaisesRegex(AnalysisError, "command_not_verbatim"):
