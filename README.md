@@ -91,7 +91,11 @@ Der explizite lokale Test `py scripts/operator-review-gui-smoke.py` erstellt **a
 Zum expliziten manuellen Test (nicht parallel zum Mock-Backend auf Port 8765) in PowerShell:
 ```powershell
 $operator = Join-Path $env:LOCALAPPDATA 'gpt-local-llm-worker\\operator'
-$env:BRIDGE_LIVE_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 32
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$env:BRIDGE_LIVE_TOKEN = ([BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
 py -m worker.live_capture_api --db (Join-Path $operator 'live-proposals.sqlite3') --targets (Join-Path $operator 'targets.json') --extension-origin 'chrome-extension://fmgkolabjpmlinbnofiidaggejfhpjpj'
 ```
 Den neuen Token über die Brave-Seitenleiste als Worker-Token konfigurieren, nur lokal verwenden und niemals in Chat/Logs posten. Nach dem Test das bisherige Mock-Token in der Extension wiederherstellen, sofern Mock-Betrieb gewünscht. Anschließend können offene Vorschläge über `worker.live_review_launcher` angezeigt werden. Ein echter Browser-End-to-End-Test dieser opt-in API ist noch nicht durchgeführt; er erfordert die ausdrückliche Aktion des Betreibers.
