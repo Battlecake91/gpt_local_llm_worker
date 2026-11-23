@@ -191,6 +191,18 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
             {"name": p["name"], "model": p["model"], "url": p["url"]}
             for p in profiles], "active": active["name"]}
 
+    @app.get("/api/bridge/v1/ollama/models", dependencies=[Depends(require_token)])
+    def list_ollama_models():
+        if analyzer is None:
+            raise HTTPException(404, "Ollama disabled")
+        try:
+            models = analyzer.available_models()
+            active, _ = analyzer.profiles.load()
+        except (AnalysisError, OSError, ValueError) as exc:
+            raise HTTPException(503, "Ollama model discovery unavailable") from exc
+        return {"active": active["name"], "selected_model": active["model"],
+                "models": models}
+
     @app.post("/api/bridge/v1/ollama/select", dependencies=[Depends(require_token)])
     def select_ollama_profile(selection: ProfileSelection):
         if analyzer is None:
