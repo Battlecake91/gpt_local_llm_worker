@@ -322,7 +322,7 @@ class OllamaPhase1Tests(unittest.TestCase):
                 payload = {
                     "schema_version": 1, "message_id": "f" * 64,
                     "conversation_id": "chat-123", "tab_id": 19, "text":
-                    "```bash\\nzpool status\\n```",
+                    "```bash\nzpool status\n```",
                     "user_prompt": "Bitte auf meinem NAS ausführen",
                     "observed_at": "2026-11-23T19:00:00Z"
                 }
