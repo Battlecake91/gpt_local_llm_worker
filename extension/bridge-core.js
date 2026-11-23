@@ -52,6 +52,26 @@
     return (body.innerText ?? body.textContent ?? '').replace(/\r\n/g, '\n');
   }
   function lastAssistant(doc) { return [...doc.querySelectorAll(ASSISTANT)].at(-1) || null; }
+  function userPromptBefore(doc, assistant) {
+    // Bind only the nearest preceding user turn in DOM order to this exact
+    // assistant element. Never use the composer or a later user message.
+    if (!assistant) return '';
+    const turns=[...doc.querySelectorAll(`${ASSISTANT},${USER}`)];
+    const index=turns.lastIndexOf(assistant);
+    if (index<=0) return '';
+    for (let i=index-1;i>=0;i--) {
+      const role=roleOf(turns[i]);
+      if (role==='assistant') return '';
+      if (role==='user') {
+        const node=turns[i];
+        const bubble=node.querySelector?.('[data-user-message-bubble="true"]')||node;
+        const value=(bubble.innerText??bubble.textContent??'').replace(/\\r\\n?/g,'\\n').trim();
+        // A truncated prompt could hide conflicting host mentions; fail closed.
+        return value.length<=8192?value:'';
+      }
+    }
+    return '';
+  }
   function lastTurnRole(doc) {
     const all = [...doc.querySelectorAll(`${ASSISTANT},${USER}`)];
     return roleOf(all.at(-1));
@@ -94,6 +114,6 @@
       },this.stableMs);
     }
   }
-  root.BridgeCore={STATES, STOP, activeStop, ASSISTANT, USER, roleOf, conversation, readable, lastAssistant, lastTurnRole, messageIdentity, Lifecycle};
+  root.BridgeCore={STATES, STOP, activeStop, ASSISTANT, USER, roleOf, conversation, readable, lastAssistant, lastTurnRole, userPromptBefore, messageIdentity, Lifecycle};
   if(typeof module!=='undefined')module.exports=root.BridgeCore;
 })(typeof globalThis!=='undefined'?globalThis:this);
