@@ -253,6 +253,22 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     })().catch(e=>reply({ok:false,error:String(e.message||e)}));
     return true;
   }
+  if(msg.type==='LIST_OLLAMA_SUGGESTIONS' || msg.type==='LIST_OLLAMA_PROFILES'){
+    if(!trustedPanel(sender)){
+      reply({ok:false,error:'untrusted_ollama_sender'});return;
+    }
+    (async()=>{
+      const path=msg.type==='LIST_OLLAMA_PROFILES'?'/ollama/profiles':'/ollama/suggestions';
+      const result=await api(path);
+      if(msg.type==='LIST_OLLAMA_PROFILES'){
+        reply({ok:true,enabled:result.enabled===true,active:result.active,
+          profiles:Array.isArray(result.profiles)?result.profiles:[]});
+      }else{
+        reply({ok:true,items:Array.isArray(result.items)?result.items:[]});
+      }
+    })().catch(e=>reply({ok:false,error:String(e.message||e)}));
+    return true;
+  }
   if(msg.type==='LIST_SSH_PROPOSALS' || msg.type==='LIST_MOCK_RESULTS' || msg.type==='DECIDE_SSH_PROPOSAL'){
     if(!trustedPanel(sender)){reply({ok:false,error:'untrusted_review_sender'});return;}
     (async()=>{
