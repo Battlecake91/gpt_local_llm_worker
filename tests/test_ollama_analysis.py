@@ -100,6 +100,32 @@ class OllamaPhase1Tests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "unknown_active"):
             self.analyze()
 
+    def test_switch_profile_without_restarting(self):
+        store = ProfileStore(self.profile_path)
+        self.assertEqual(store.load()[0]["name"], "local")
+        store.select("nas")
+        self.assertEqual(store.load()[0]["name"], "nas")
+        with self.assertRaisesRegex(AnalysisError, "unknown_profile"):
+            store.select("unconfigured")
+
+    def test_model_listing_is_a_read_only_connection_test(self):
+        def handler(request):
+            self.assertEqual(request.url.path, "/api/tags")
+            return httpx.Response(200, json={
+                "models": [{"name": "qwen3:4b"}, {"name": "llama3.2:3b"}]
+            })
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            analyzer = OllamaAnalyzer(ProfileStore(self.profile_path), client)
+            self.assertEqual(analyzer.available_models(), ["qwen3:4b", "llama3.2:3b"])
+
+    def test_multiple_complete_blocks_are_kept_separate(self):
+        self.result["commands"] = ["zpool status", "uptime"]
+        suggestion = self.analyze(
+            "Auf dem NAS ausführen:\\n\\n```bash\\nzpool status\\n```\\n"
+            "\\n```bash\\nuptime\\n```"
+        )
+        self.assertEqual(suggestion.commands, ("zpool status", "uptime"))
+
     def test_api_persists_review_only_suggestion_and_no_execution(self):
         targets = self.root / "targets.json"
         targets.write_text(json.dumps([{
