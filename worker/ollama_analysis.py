@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -87,9 +88,27 @@ class ProfileStore:
             if auth_env is not None and (not isinstance(auth_env, str) or
                     not re.fullmatch(r"[A-Z_][A-Z0-9_]{0,79}", auth_env)):
                 raise AnalysisError("invalid_auth_env")
-        if config["active"] not in names:
+        if not isinstance(config["active"], str) or config["active"] not in names:
             raise AnalysisError("unknown_active_profile")
         return next(p for p in profiles if p["name"] == config["active"]), profiles
+
+    def select(self, name: str):
+        """Select one of the already configured endpoints without restarting."""
+        _, profiles = self.load()
+        if not isinstance(name, str) or name not in {p["name"] for p in profiles}:
+            raise AnalysisError("unknown_profile")
+        content = json.dumps({"active": name, "profiles": profiles},
+                             ensure_ascii=False, indent=2) + "\n"
+        fd, path = tempfile.mkstemp(dir=self.path.parent, prefix=".ollama-profile-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                output.write(content)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(path, self.path)
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
 
 
 class OllamaAnalyzer:
@@ -156,7 +175,7 @@ class OllamaAnalyzer:
         if host is not None and (not isinstance(host, str) or host not in allowed_hosts):
             raise AnalysisError("host_not_allowlisted")
         risk, reason = result["risk"], result["reason"]
-        if risk not in RISKS or not isinstance(reason, str) or not 1 <= len(reason) <= 300:
+        if not isinstance(risk, str) or risk not in RISKS or not isinstance(reason, str) or not 1 <= len(reason) <= 300:
             raise AnalysisError("invalid_risk")
         if not result["actionable"]:
             if commands:
