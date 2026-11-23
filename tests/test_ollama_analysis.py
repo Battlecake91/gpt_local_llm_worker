@@ -305,6 +305,39 @@ class OllamaPhase1Tests(unittest.TestCase):
                 self.assertEqual(api.get("/api/bridge/v1/outbound",
                                          headers=headers).json(), {"items": []})
 
+    def test_nonactionable_capture_keeps_metadata_diagnostic_without_proposal(self):
+        targets = self.root / "diagnostic-targets.json"
+        targets.write_text(json.dumps([{
+            "host_id": "nas", "hostname": "fixture.example.invalid", "port": 22,
+            "username": "fixture", "host_public_key": KEY,
+        }]), encoding="utf-8")
+        db = self.root / "diagnostics.sqlite3"
+        self.result.update(actionable=False, commands=[], host=None, risk=None,
+                           reason="Non-actionable example")
+        with self.client() as fake:
+            app = create_app(db_path=db, targets_path=targets, token=TOKEN,
+                             extension_origin=ORIGIN, ollama_profiles=self.profile_path,
+                             ollama_client=fake)
+            with TestClient(app) as api:
+                payload = {
+                    "schema_version": 1, "message_id": "f" * 64,
+                    "conversation_id": "chat-123", "tab_id": 19, "text":
+                    "```bash\\nzpool status\\n```",
+                    "user_prompt": "Bitte auf meinem NAS ausführen",
+                    "observed_at": "2026-11-23T19:00:00Z"
+                }
+                headers = {"Authorization": "Bearer " + TOKEN}
+                self.assertEqual(api.post("/api/bridge/v1/captures",
+                                          json=payload, headers=headers).status_code, 200)
+                result = api.get("/api/bridge/v1/ollama/diagnostics",
+                                 headers=headers).json()["items"]
+                self.assertEqual(result[0]["status"], "classified_nonactionable")
+                self.assertTrue(result[0]["user_prompt_present"])
+                self.assertEqual(result[0]["eligible_shell_blocks"], 1)
+                self.assertEqual(api.get("/api/bridge/v1/ollama/suggestions",
+                                         headers=headers).json()["items"], [])
+                self.assertIsNone(LiveApprovalLedger(db).get("ollama-" + "f" * 48))
+
     def test_api_persists_review_only_suggestion_and_no_execution(self):
         targets = self.root / "targets.json"
         targets.write_text(json.dumps([{
@@ -330,6 +363,12 @@ class OllamaPhase1Tests(unittest.TestCase):
                 self.assertEqual(proposal["conversation_id"], "chat-123")
                 listing = api.get("/api/bridge/v1/ollama/suggestions", headers=headers)
                 self.assertEqual(listing.json()["items"][0]["risk"], "green")
+                diagnostics = api.get("/api/bridge/v1/ollama/diagnostics",
+                                      headers=headers).json()["items"]
+                self.assertEqual(diagnostics[0]["status"], "proposal_ready")
+                self.assertFalse(diagnostics[0]["user_prompt_present"])
+                self.assertEqual(diagnostics[0]["eligible_shell_blocks"], 1)
+                self.assertNotIn("text", diagnostics[0])
                 self.assertTrue(listing.json()["items"][0]["review_only"])
                 self.assertEqual(api.post("/api/bridge/v1/ssh/proposals/" +
                                           "ollama-x/approve", headers=headers).status_code, 404)
