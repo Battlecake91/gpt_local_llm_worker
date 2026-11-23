@@ -10,7 +10,7 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/b
 function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,rejectToken=null,initialStore={},browserTabs=[]}={}){
   const store=new Map(Object.entries(initialStore)),calls=[],sent=[];const listeners={},s={};
   const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{},getURL:path=>'chrome-extension://testid/'+path};
-  const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>({id,url:'https://chatgpt.com/c/abc'}),sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async options=>options?.active?browserTabs.filter(t=>t.active):browserTabs},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
+  const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>browserTabs.length?browserTabs.find(t=>t.id===id)||null:{id,url:'https://chatgpt.com/c/abc'},sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async options=>options?.active?browserTabs.filter(t=>t.active):browserTabs},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
   const fetch=async(url,opt={})=>{calls.push({url,opt});if(rejectToken && opt.headers?.Authorization===`Bearer ${rejectToken}`)return {ok:false,status:401};if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
   const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console,crypto:webcrypto,TextEncoder};
   vm.runInNewContext(source,context);
@@ -220,4 +220,57 @@ test('manual capture requires trusted panel and delegates only to active ChatGPT
     {url:'chrome-extension://testid/panel.html'});
   assert.equal(trusted.ok,true);
   assert.equal(h.sent.filter(x=>x.type==='CAPTURE_CURRENT_REPLY').length,1);
+});
+
+test('tab selector lists multiple ChatGPT chats without choosing arbitrarily',async()=>{
+  const tabs=[
+    {id:11,active:false,url:'https://chatgpt.com/c/abc',title:'Erster Chat'},
+    {id:12,active:false,url:'https://chatgpt.com/g/g-p-work/c/def',title:'Projekt-Chat'},
+    {id:13,active:false,url:'https://example.com/',title:'Nicht ChatGPT'},
+  ];
+  const h=harness({browserTabs:tabs});
+  const result=await h.event({type:'LIST_CHATGPT_TABS'},
+    {url:'chrome-extension://testid/panel.html'});
+  assert.equal(result.ok,true);
+  assert.equal(result.items.length,2);
+  assert.equal(result.items[0].tab_id,11);
+  assert.equal(result.items[1].conversation_id,'def');
+  assert.ok(!JSON.stringify(result).includes('example.com'));
+});
+test('manual capture uses explicitly selected tab among multiple chats',async()=>{
+  const h=harness({browserTabs:[
+    {id:11,active:false,url:'https://chatgpt.com/c/abc',title:'First'},
+    {id:12,active:false,url:'https://chatgpt.com/g/g-p-work/c/def',title:'Second'},
+  ]});
+  const result=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:12,conversation_id:'def'},
+    {url:'chrome-extension://testid/panel.html'});
+  assert.equal(result.ok,true);
+  assert.equal(h.sent.filter(m=>m.type==='CAPTURE_CURRENT_REPLY').length,1);
+});
+test('selected chat mismatch or closed tab is rejected before capture',async()=>{
+  const h=harness({browserTabs:[
+    {id:12,active:false,url:'https://chatgpt.com/g/g-p-work/c/new',title:'Changed'},
+  ]});
+  const sender={url:'chrome-extension://testid/panel.html'};
+  const changed=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:12,conversation_id:'old'},sender);
+  assert.equal(changed.ok,false);
+  assert.equal(changed.error,'selected_chat_changed_or_closed');
+  const missing=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:99,conversation_id:'abc'},sender);
+  assert.equal(missing.ok,false);
+  assert.equal(h.sent.filter(m=>m.type==='CAPTURE_CURRENT_REPLY').length,0);
+});
+test('untrusted sender cannot enumerate or capture selected tabs',async()=>{
+  const h=harness({browserTabs:[
+    {id:12,active:true,url:'https://chatgpt.com/c/def',title:'Secret'},
+  ]});
+  const sender={tab:{id:12},url:'https://chatgpt.com/c/def'};
+  for(const type of ['LIST_CHATGPT_TABS','PREVIEW_SELECTED_REPLY','CAPTURE_CURRENT_FROM_PANEL']){
+    const res=await h.event({type,tab_id:12,conversation_id:'def'},sender);
+    assert.equal(res.ok,false);
+    assert.equal(res.error,'untrusted_capture_sender');
+  }
+  assert.equal(h.sent.length,0);
 });
