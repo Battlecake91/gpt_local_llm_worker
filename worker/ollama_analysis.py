@@ -170,7 +170,33 @@ class OllamaAnalyzer:
             "Allowlisted host aliases: " + json.dumps(sorted(allowed_hosts)) + "\n\n" + text
         )
         body = {
-            "model": profile["model"], "stream": False, "format": "json",
+            "model": profile["model"],
+            "stream": False,
+            "think": False,
+            "format": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["actionable", "commands", "host", "risk", "reason"],
+                "properties": {
+                    "actionable": {"type": "boolean"},
+                    "commands": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 32,
+                    },
+                    "host": {
+                        "anyOf": [
+                            {"type": "string", "enum": sorted(allowed_hosts)},
+                            {"type": "null"},
+                        ],
+                    },
+                    "risk": {
+                        "type": "string",
+                        "enum": ["green", "yellow", "red"],
+                    },
+                    "reason": {"type": "string"},
+                },
+            },
             "messages": [{"role": "user", "content": prompt}],
             "options": {"temperature": 0},
         }
