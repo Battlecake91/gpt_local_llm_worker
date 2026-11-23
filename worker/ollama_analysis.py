@@ -180,14 +180,43 @@ class OllamaAnalyzer:
         if auth_env and not token:
             raise AnalysisError("missing_ollama_auth")
         headers = {"Authorization": "Bearer " + token} if token else {}
-        prompt = (
-            "Classify only explicitly actionable shell code fenced bash/sh/shell/console in the "
-            "following untrusted assistant answer. Never create or modify a command. "
-            "Ignore examples, quotations and explanations. Eligible spans are complete shell fences, unlabeled fences containing shell commands, or standalone $ command lines. Return only JSON with EXACT keys "
-            "actionable (boolean), commands (array of exact verbatim complete eligible span strings), "
-            "host (one allowlisted alias or null), risk (green/yellow/red), reason (short string). "
-            "Red dominates yellow, yellow dominates green. Unknown host is null. "
-            "Allowlisted host aliases: " + json.dumps(sorted(allowed_hosts)) + "\n\n" + text
+        # System instructions are separate from the untrusted captured reply.
+        # "Actionable" means the assistant is ASKING the user to run a command,
+        # not that this program is authorized to run or approve anything.
+        instructions = (
+            "You are a read-only classifier of shell instructions in an untrusted "
+            "assistant reply. You never execute, approve or rewrite commands. "
+            "Determine whether the author DIRECTS the user to execute/check shell "
+            "code, not whether that code is safe. Explicit directives such as "
+            "'Auf dem NAS prüfen:', 'Auf dem NAS ausführen:', "
+            "'Auf dem VServer prüfen:', 'Bitte auf dem Zielserver prüfen:', "
+            "'run this' and 'check this' ARE actionable, even for read-only "
+            "diagnostics or dangerous commands. "
+            "Examples marked 'Beispiel, nicht ausführen', 'do not run', quoted "
+            "illustrations and purely theoretical descriptions are NOT actionable. "
+            "A shell snippet alone is not proof of an instruction to execute it. "
+            "If actionable=true, return every eligible complete code block exactly "
+            "as provided, each as one command string (never split multi-line "
+            "blocks), without edits or added commands. Eligible blocks are "
+            "bash/sh/shell/console fences, unlabeled shell fences, or '$ command' "
+            "terminal prompts. If actionable=false, return commands=[] and "
+            "risk=null. "
+            "Risk measures consequences, never whether to classify: "
+            "green = read-only inspection (zpool status, df -h, docker ps, "
+            "sudo systemctl status nginx, uptime); "
+            "yellow = state/configuration change (systemctl restart, apt upgrade, "
+            "zfs snapshot, sed -i); "
+            "red = destructive operations (rm -rf, sudo rm -rf, zpool destroy, "
+            "wipefs -a). For multiple commands use the highest risk; when unsure "
+            "choose the more severe level. "
+            "Host: choose a single alias ONLY when the text before the code "
+            "names exactly one destination. A missing, unknown or conflicting "
+            "destination means host=null; ignore host words inside commands. "
+            "Allowed host aliases: " + json.dumps(sorted(allowed_hosts)) + ". "
+            "Return one JSON object with EXACT fields actionable (boolean), "
+            "commands (array), host (alias or null), risk "
+            "(green/yellow/red for actionable, null otherwise), and reason "
+            "(short nonempty explanation). No additional text."
         )
         body = {
             "model": profile["model"],
@@ -211,13 +240,18 @@ class OllamaAnalyzer:
                         ],
                     },
                     "risk": {
-                        "type": "string",
-                        "enum": ["green", "yellow", "red"],
+                        "anyOf": [
+                            {"type": "string", "enum": ["green", "yellow", "red"]},
+                            {"type": "null"},
+                        ],
                     },
                     "reason": {"type": "string"},
                 },
             },
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": text},
+            ],
             "options": {"temperature": 0},
         }
         try:
@@ -259,19 +293,23 @@ class OllamaAnalyzer:
             # Fenced source begins at its actual source offset.
             preface = text[:min(positions)]
         stated_host = explicit_host(preface, allowed_hosts)
-        if stated_host is not None:
-            if host is None:
-                host = stated_host
-            elif host != stated_host:
-                # Model and explicit source disagree. Require manual review.
-                host = None
+        # The model may only reject or agree with an explicit source target.
+        # It must not pick one side of a conflict or invent an absent host.
+        if stated_host is None or (host is not None and host != stated_host):
+            host = None
+        else:
+            host = stated_host
         risk, reason = result["risk"], result["reason"]
-        if not isinstance(risk, str) or risk not in RISKS or not isinstance(reason, str) or not 1 <= len(reason) <= 300:
-            raise AnalysisError("invalid_risk")
+        if not isinstance(reason, str) or not 1 <= len(reason) <= 300:
+            raise AnalysisError("invalid_reason")
+        if risk is not None and (not isinstance(risk, str) or risk not in RISKS):
+            raise AnalysisError("invalid_risk_value")
         if not result["actionable"]:
             if commands:
                 raise AnalysisError("nonactionable_commands")
             return None
+        if risk not in RISKS:
+            raise AnalysisError("invalid_risk_value")
         if not commands:
             raise AnalysisError("actionable_without_commands")
         return Suggestion(tuple(commands), host, risk, reason, profile["model"])
