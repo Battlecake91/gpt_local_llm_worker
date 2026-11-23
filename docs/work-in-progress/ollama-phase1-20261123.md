@@ -37,3 +37,15 @@ node --test tests/*.cjs
 ## CI-Abnahme
 - [GitHub Actions: Python- und Brave-JavaScript-Regressionen bestanden](https://github.com/Battlecake91/gpt_local_llm_worker/actions/runs/45192345783), Commit `9306a64f15547f0835c0dde99133edb841c2a0b1`.
 - Der vorangehende CI-Lauf `45192260869` war wegen fehlerhafter Escape-Zeichen in einer neuen Test-Fixture fehlgeschlagen. Die Fixture wurde korrigiert und der vollständige nächste Lauf war erfolgreich.
+
+## Reproduzierbarer echter Ollama-Risikobenchmark (2026-11-23)
+- `worker/ollama_benchmark.py`: 19 unveränderliche Testfälle, standardmäßig zwei Durchläufe (=38 Ollama-Anfragen). Grün/Gelb/Rot, Sudo-Lesediagnose, destruktive Operationen, NAS/Backup-NAS/VServer, Hostkonflikt, fehlender Host, bloße Beispielanweisung, unmarkierte Prosa und gemischte Risikostufen.
+- Der Runner verwendet ausschließlich `OllamaAnalyzer.analyze`; keinerlei SSH-, Shell-, Sudo- oder Browser-Aufrufe.
+- Jedes Ergebnis enthält Soll- und Ist-Wert, Feldabweichungen, Fehler, Dauer und Kennzeichen für *gefährliche Unterbewertung* (z.B. Rot -> Grün). Die Benchmarkklassifikation ist selbst kein automatischer Sicherheitsentscheid.
+- Lokaler Aufruf (Windows PowerShell, Repository-Root):
+  ```powershell
+  py -m worker.ollama_benchmark --runs 2 --output "$env:TEMP\ollama-benchmark.json"
+  ```
+- Erwartung vor Automatik: keine Unterbewertungen; jede Abweichung untersuchen, insbesondere Beispieltexte und Hostkonflikte. Selbst 100 % Treffer in 38 Testfällen wären keine Sicherheitsgarantie. Bis zur Auswertung bleiben Auto-Approval und produktiver SSH-Executor deaktiviert.
+- Regression: `tests/test_ollama_benchmark.py` verwendet reine Fixtures und prüft auch Fälle mit falscher grüner Einstufung roter Befehle.
+- Echte Modellresultate können nur auf dem Benutzer-PC mit laufendem Ollama erhoben werden; CI prüft lediglich die deterministische Benchmarklogik.
