@@ -7,6 +7,27 @@
   // decorations: each modern content-search unit represents one message.
   const ASSISTANT = '[data-message-author-role="assistant"],[data-content-search-unit-key$=":assistant"]';
   const USER = '[data-message-author-role="user"],[data-content-search-unit-key$=":user"]';
+  function activeStop(doc) {
+    // A hidden duplicate stop control must not permanently block capture.
+    // Never infer completion from a mere timeout: an observed, visible stop
+    // lifecycle plus stable assistant answer are still mandatory.
+    for (const button of doc.querySelectorAll(STOP)) {
+      if (button.hidden || button.disabled ||
+          button.getAttribute?.('aria-hidden')==='true' ||
+          button.getAttribute?.('aria-disabled')==='true' ||
+          button.closest?.('[hidden],[inert],[aria-hidden="true"]')) continue;
+      if (typeof button.getClientRects==='function' &&
+          button.getClientRects().length===0) continue;
+      const view=doc.defaultView;
+      if (typeof view?.getComputedStyle==='function') {
+        const css=view.getComputedStyle(button);
+        if (css.display==='none' || css.visibility==='hidden' ||
+            css.visibility==='collapse') continue;
+      }
+      return button;
+    }
+    return null;
+  }
   function roleOf(node) {
     if (!node) return null;
     const legacy=node.getAttribute('data-message-author-role');
@@ -73,6 +94,6 @@
       },this.stableMs);
     }
   }
-  root.BridgeCore={STATES, STOP, ASSISTANT, USER, roleOf, conversation, readable, lastAssistant, lastTurnRole, messageIdentity, Lifecycle};
+  root.BridgeCore={STATES, STOP, activeStop, ASSISTANT, USER, roleOf, conversation, readable, lastAssistant, lastTurnRole, messageIdentity, Lifecycle};
   if(typeof module!=='undefined')module.exports=root.BridgeCore;
 })(typeof globalThis!=='undefined'?globalThis:this);
