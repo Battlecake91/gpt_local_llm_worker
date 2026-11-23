@@ -165,11 +165,15 @@ test('mock history retrieval is restricted to the extension sidepanel',async()=>
 });
 
 test('401 rejection stops capture storm, persists queue and resumes after new token',async()=>{
-  const h=harness({rejectToken:'expired-token'});
-  await h.event({type:'SET_TOKEN',token:'expired-token'});
   const payload={message_id:'capture-one',text:'example',conversation_id:'abc'};
-  await h.event({type:'CAPTURE',payload});
-  await h.event({type:'CAPTURE',payload:{...payload,message_id:'capture-two'}});
+  const initialStore={
+    workerBearerToken:'expired-token',
+    pendingCaptures:[
+      {payload,attempt:0},
+      {payload:{...payload,message_id:'capture-two'},attempt:0},
+    ],
+  };
+  const h=harness({rejectToken:'expired-token',initialStore});
   await h.event({type:'SYNC_NOW'});
   assert.equal(h.calls.filter(x=>x.url.endsWith('/captures')).length,1);
   assert.equal(h.store.get('pendingCaptures').length,2);
