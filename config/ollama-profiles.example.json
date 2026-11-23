@@ -1,0 +1,19 @@
+{
+  "active": "local",
+  "profiles": [
+    {
+      "name": "local",
+      "url": "http://127.0.0.1:11434",
+      "model": "qwen3:4b",
+      "timeout_seconds": 30,
+      "auth_env": null
+    },
+    {
+      "name": "nas",
+      "url": "http://nas:11434",
+      "model": "qwen3:4b",
+      "timeout_seconds": 60,
+      "auth_env": null
+    }
+  ]
+}
