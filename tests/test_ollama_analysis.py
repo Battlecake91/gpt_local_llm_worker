@@ -258,6 +258,13 @@ class OllamaPhase1Tests(unittest.TestCase):
         self.assertIsNone(suggestion.host)
         self.assertIsNone(suggestion.batch("d" * 64))
 
+    def test_host_alias_requires_word_boundaries(self):
+        from worker.ollama_analysis import explicit_host
+        allowed = {"nas", "backup-nas", "vserver"}
+        self.assertIsNone(explicit_host("blanas and nas1", allowed))
+        self.assertEqual(explicit_host("meinem NAS", allowed), "nas")
+        self.assertEqual(explicit_host("Backup-NAS", allowed), "backup-nas")
+
     def test_conflicting_hosts_inside_user_prompt_never_select_target(self):
         suggestion = OllamaAnalyzer(ProfileStore(self.profile_path), self.client()).analyze(
             "```bash\nzpool status\n```", {"nas", "backup-nas", "vserver"},
