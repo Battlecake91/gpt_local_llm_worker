@@ -68,6 +68,12 @@ class LiveCaptureAPITests(unittest.TestCase):
         self.assertEqual(self.post(data).json()["status"], "accepted")
         self.assertEqual(self.post(data).json()["status"], "duplicate")
 
+    def test_identical_capture_with_new_observed_time_is_duplicate(self):
+        data = self.data()
+        self.assertEqual(self.post(data).json()["status"], "accepted")
+        retry = dict(data, observed_at="2026-11-23T01:11:03Z")
+        self.assertEqual(self.post(retry).json()["status"], "duplicate")
+
     def test_capture_id_collision_fails_closed(self):
         data = self.data()
         self.assertEqual(self.post(data).status_code, 200)
