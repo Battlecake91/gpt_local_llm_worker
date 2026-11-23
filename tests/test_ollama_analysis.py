@@ -67,12 +67,12 @@ class OllamaPhase1Tests(unittest.TestCase):
 
     def test_unlabeled_shell_fence_is_extracted(self):
         self.assertEqual(self.analyze(
-            "Auf dem NAS ausführen:\\n```\\nzpool status\\n```"
+            "Auf dem NAS ausführen:\n```\nzpool status\n```"
         ).commands, ("zpool status",))
 
     def test_explicit_terminal_prompt_without_fence(self):
         self.assertEqual(self.analyze(
-            "Auf dem NAS ausführen:\\n$ zpool status"
+            "Auf dem NAS ausführen:\n$ zpool status"
         ).commands, ("zpool status",))
 
     def test_hallucinated_modified_command_is_rejected(self):
