@@ -7,11 +7,11 @@ const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
 const approval=text=>({job_id:'job-1',approval_id:'approved-1',host_id:'lab-host',command_sha256:digest('host=lab-host;commands=uptime'),result_sha256:digest(text)});
 const approvalGrant=(item)=>({allowed:true,claim_id:'claim123',kind:'approved_ssh_result',outbound_id:item.id,conversation_id:item.conversation_id,tab_id:item.tab_id,...item.approval});
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/background.js'),'utf8');
-function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,initialStore={}}={}){
+function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,rejectToken=null,initialStore={}}={}){
   const store=new Map(Object.entries(initialStore)),calls=[],sent=[];const listeners={},s={};
   const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{},getURL:path=>'chrome-extension://testid/'+path};
   const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>({id,url:'https://chatgpt.com/c/abc'}),sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async()=>[]},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
-  const fetch=async(url,opt={})=>{calls.push({url,opt});if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
+  const fetch=async(url,opt={})=>{calls.push({url,opt});if(rejectToken && opt.headers?.Authorization===`Bearer ${rejectToken}`)return {ok:false,status:401};if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
   const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console,crypto:webcrypto,TextEncoder};
   vm.runInNewContext(source,context);
   async function event(msg,sender={tab:{id:1}}){let replyValue;listeners.message(msg,sender,v=>replyValue=v);await new Promise(resolve=>setTimeout(resolve,20));return replyValue;}
@@ -162,4 +162,18 @@ test('mock history retrieval is restricted to the extension sidepanel',async()=>
   assert.ok(Array.isArray(accepted.items));
   assert.equal(h.calls.filter(x=>x.url.endsWith('/ssh/mock-results')).length,1);
   assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
+
+test('401 rejection stops capture storm, persists queue and resumes after new token',async()=>{
+  const h=harness({rejectToken:'expired-token'});
+  await h.event({type:'SET_TOKEN',token:'expired-token'});
+  const payload={message_id:'capture-one',text:'example',conversation_id:'abc'};
+  await h.event({type:'CAPTURE',payload});
+  await h.event({type:'CAPTURE',payload:{...payload,message_id:'capture-two'}});
+  await h.event({type:'SYNC_NOW'});
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/captures')).length,1);
+  assert.equal(h.store.get('pendingCaptures').length,2);
+  await h.event({type:'SET_TOKEN',token:'valid-new-token'});
+  assert.equal(h.store.get('pendingCaptures').length,0);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/captures')).length,3);
 });
