@@ -82,6 +82,8 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
 
         # Capture dedup and LIVE proposal commit in one SQLite transaction.
         with ledger._connect() as conn:
+            # Serialize concurrent retries before checking either identity.
+            conn.execute("BEGIN IMMEDIATE")
             old = conn.execute(
                 "SELECT conversation_id, tab_id, text_sha256, observed_at "
                 "FROM live_captures WHERE message_id=?", (payload.message_id,)
