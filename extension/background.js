@@ -4,6 +4,7 @@ const pending=new Map(), busy=new Set();
 let sessionToken=''; // Cached after protected extension-local storage has been loaded.
 let authRejected=false; // Stop replay storms until the operator replaces the token.
 let credentialsReady=null;
+let startupReady; // Capture queue restoration must finish before any network cycle.
 const TOKEN_KEY='workerBearerToken';
 // Do not expose persisted tokens to content scripts. Fail closed if Chromium
 // cannot restrict storage to trusted extension contexts.
@@ -64,6 +65,7 @@ async function validateGrant(item,grant){
 }
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function submitCapture(payload,tabId){
+  await startupReady;
   if(pending.has(payload.message_id))return;
   pending.set(payload.message_id,{payload:{...payload,tab_id:tabId},attempt:0});state.pending=pending.size;broadcast();
   await flushCaptures();
@@ -130,7 +132,7 @@ let cycleRunning=false;
 async function cycle(){
   if(cycleRunning)return;
   cycleRunning=true;
-  try{await flushCaptures();await outbound();state.connected=true;state.error=null;}
+  try{await startupReady;await flushCaptures();await outbound();state.connected=true;state.error=null;}
   catch(e){state.connected=false;state.error=String(e);}
   finally{cycleRunning=false;broadcast();}
 }
@@ -233,11 +235,12 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
 });
 chrome.tabs.onRemoved.addListener(id=>{delete state.tabs[id];broadcast();});
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
-Promise.all([credentials(),chrome.storage.local.get(['pendingCaptures','captureEnabled'])]).then(([,data])=>{
+startupReady=Promise.all([credentials(),chrome.storage.local.get(['pendingCaptures','captureEnabled'])]).then(([,data])=>{
   state.captureEnabled=data.captureEnabled!==false;
   for(const item of data.pendingCaptures||[])pending.set(item.payload.message_id,item);
-  state.pending=pending.size;state.tokenSaved=!!sessionToken;broadcast();cycle();
-}).catch(e=>{state.error='storage_security_failed: '+String(e);broadcast();});
+  state.pending=pending.size;state.tokenSaved=!!sessionToken;broadcast();
+});
+startupReady.then(()=>cycle()).catch(e=>{state.error='storage_security_failed: '+String(e);broadcast();});
 // MV3 worker can be suspended. Alarm wakes it and drives bounded reconciliation.
 chrome.alarms?.create('bridge-sync',{periodInMinutes:0.5});
 chrome.alarms?.onAlarm.addListener(alarm=>{if(alarm.name==='bridge-sync')cycle();});
