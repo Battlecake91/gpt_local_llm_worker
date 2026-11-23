@@ -165,6 +165,30 @@ async function listedConversationTabs(){
       title:String(tab.title||'ChatGPT').slice(0,160),
       active:tab.active===true}));
 }
+// MV3 extension reloads can leave already-open tabs without a content-script
+// receiver. Recover once on the exact verified ChatGPT conversation tab.
+async function messageToConversationTab(tab,expectedConversation,message){
+  if(conversationFromUrl(tab.url)!==expectedConversation)
+    throw Error('selected_chat_changed_or_closed');
+  try{
+    return await chrome.tabs.sendMessage(tab.id,message);
+  }catch(error){
+    const detail=String(error?.message||error);
+    if(!/Receiving end does not exist|Could not establish connection/i.test(detail))
+      throw error;
+    const current=await chrome.tabs.get(tab.id).catch(()=>null);
+    if(!current||conversationFromUrl(current.url)!==expectedConversation)
+      throw Error('selected_chat_changed_or_closed');
+    await chrome.scripting.executeScript({
+      target:{tabId:tab.id},
+      files:['extractor.js','bridge-core.js','stop-probe.js','content.js']
+    });
+    const after=await chrome.tabs.get(tab.id).catch(()=>null);
+    if(!after||conversationFromUrl(after.url)!==expectedConversation)
+      throw Error('selected_chat_changed_or_closed');
+    return chrome.tabs.sendMessage(tab.id,message);
+  }
+}
 async function selectedConversationTab(tabId,conversationId){
   if(!Number.isSafeInteger(tabId)||tabId<=0 ||
      typeof conversationId!=='string'||!conversationId)throw Error('invalid_selected_chat');
@@ -222,7 +246,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       const tab=(msg.tab_id!==undefined || msg.conversation_id!==undefined)
         ? await selectedConversationTab(msg.tab_id,msg.conversation_id)
         : await activeConversationTab();
-      const result=await chrome.tabs.sendMessage(tab.id,{
+      const result=await messageToConversationTab(tab,conversationFromUrl(tab.url),{
         type:msg.type==='PREVIEW_SELECTED_REPLY'?'PREVIEW_CURRENT_REPLY':'CAPTURE_CURRENT_REPLY'
       });
       reply(result?.ok?result:{ok:false,error:result?.error||'content_script_unavailable'});
