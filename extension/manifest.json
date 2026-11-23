@@ -3,8 +3,8 @@
   "name": "GPT Local Worker Bridge",
   "version": "0.1.0",
   "description": "Capture completed ChatGPT replies and stage authorized worker results.",
-  "permissions": ["storage", "tabs", "sidePanel", "alarms"],
-  "host_permissions": ["http://127.0.0.1/*"],
+  "permissions": ["storage", "tabs", "sidePanel", "alarms", "scripting"],
+  "host_permissions": ["http://127.0.0.1/*", "https://chatgpt.com/*"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [{
     "matches": ["https://chatgpt.com/*"],
