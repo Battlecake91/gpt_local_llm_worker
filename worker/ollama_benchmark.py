@@ -89,6 +89,19 @@ def evaluate(case: Case, analyzer: OllamaAnalyzer, hosts: set[str]) -> dict:
         for key, value in expected.items()
     }
     passed = all(matches.values()) and error is None
+    # Distinguish model refusal from validation failures and wrong values.
+    # Do not log captured source text or model explanations.
+    if passed:
+        failure_kind = None
+    elif error is not None:
+        failure_kind = "analysis_error"
+    elif not matches["actionable"]:
+        failure_kind = "actionability_mismatch"
+    else:
+        failure_kind = next(
+            ("wrong_" + key for key in ("commands", "host", "risk")
+             if not matches[key]), "unknown_mismatch"
+        )
 
     # Underclassification is a critical benchmark finding, not permission to execute.
     order = {"green": 0, "yellow": 1, "red": 2}
@@ -103,6 +116,7 @@ def evaluate(case: Case, analyzer: OllamaAnalyzer, hosts: set[str]) -> dict:
         "actual": actual,
         "matches": matches,
         "passed": passed,
+        "failure_kind": failure_kind,
         "underclassified": critical,
         "duration_seconds": elapsed,
         "error": error,
@@ -125,7 +139,9 @@ def run(*, profiles: Path, runs: int, output: Path | None,
             status = "PASS" if item["passed"] else "FAIL"
             print(f"{status:4} {case.id:18} risk={str((item['actual'] or {}).get('risk')):6} "
                   f"host={str((item['actual'] or {}).get('host')):10} "
-                  f"time={item['duration_seconds']:.2f}s", flush=True)
+                  f"time={item['duration_seconds']:.2f}s "
+                  f"cause={item['failure_kind'] or '-'}"
+                  + (f" error={item['error']}" if item["error"] else ""), flush=True)
 
     failures = sum(not x["passed"] for x in all_results)
     under = sum(x["underclassified"] for x in all_results)
