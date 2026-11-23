@@ -130,17 +130,10 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         return {"message_id": payload.message_id, "status": "accepted"}
 
     @app.get("/api/bridge/v1/ssh/proposals", dependencies=[Depends(require_token)])
-    def list_proposals():
-        # This is read-only metadata; the existing mock approve/reject paths
-        # are deliberately NOT exposed by this service.
-        with ledger._connect() as conn:
-            rows = conn.execute(
-                "SELECT request_id,host_id,conversation_id,tab_id,status "
-                "FROM live_proposals WHERE status='PROPOSED' "
-                "ORDER BY rowid DESC LIMIT 100").fetchall()
-        return {"items": [
-            dict(zip(("request_id", "host_id", "conversation_id",
-                      "tab_id", "status"), row)) for row in rows]}
+    def mock_panel_proposals():
+        # The existing side panel's buttons are MOCK approve/reject actions.
+        # LIVE proposals are only listed/reviewed via live_review_launcher.
+        return {"items": []}
 
     @app.get("/api/bridge/v1/outbound", dependencies=[Depends(require_token)])
     def outbound():
