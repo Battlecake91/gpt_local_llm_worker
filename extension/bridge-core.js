@@ -18,7 +18,7 @@
   }
   function conversation(url) {
     try { const u = new URL(url); if (u.hostname !== 'chatgpt.com') return null;
-      const match = u.pathname.match(/^\/c\/([a-zA-Z0-9-]+)\/?$/);
+      const match = u.pathname.match(/^(?:\/c|\/g\/g-p-[a-zA-Z0-9-]+\/c)\/([a-zA-Z0-9-]+)\/?$/);
       return match ? match[1] : null;
     } catch { return null; }
   }
