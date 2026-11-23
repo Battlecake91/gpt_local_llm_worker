@@ -63,6 +63,22 @@ class LiveCaptureAPITests(unittest.TestCase):
         self.assertEqual(row["tab_id"], 17)
         self.assertEqual(row["host_id"], "nas")
 
+    def test_brave_unlabeled_json_fence_becomes_live_proposal(self):
+        data = self.data(request_id="brave-e2e-fence")
+        data["text"] = (
+            "Folgender Auftrag ist nur ein Vorschlag:\n\n"
+            + "```\n" + data["text"] + "\n```\n\n"
+            + "Keine SSH-Ausfuehrung ohne Freigabe."
+        )
+        data["message_id"] = hashlib.sha256(data["text"].encode()).hexdigest()
+        result = self.post(data)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["status"], "accepted")
+        proposal = LiveApprovalLedger(self.db).get("brave-e2e-fence")
+        self.assertIsNotNone(proposal)
+        self.assertEqual(proposal["status"], "PROPOSED")
+        self.assertEqual(proposal["host_id"], "nas")
+
     def test_identical_capture_is_idempotent(self):
         data = self.data()
         self.assertEqual(self.post(data).json()["status"], "accepted")
