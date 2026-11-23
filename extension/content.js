@@ -41,7 +41,9 @@
         .filter(name=>/^(data-(turn|content-search|chatgpt-search|thread|test|message|app-shell))/.test(name))
     )].slice(0,24);
     const debug={
-      stopDetected:!!stop, stopEverSeen, assistantCount:assistantNodes().length,
+      stopDetected:!!stop, stopEverSeen,
+      rawStopMatches:document.querySelectorAll(core.STOP).length,
+      assistantCount:assistantNodes().length,
       lastRole:role||'none', lastAnswerLength:core.readable(node).length,
       hasConversation:!!tabConversation, candidateButtons:candidates, scanCount,
       selectorCounts, attributeHints, stopProbe:stopProbe.snapshot(),
@@ -63,7 +65,7 @@
     // The UI may still be streaming or may have replaced the final turn during
     // stabilization. Fail closed instead of shipping a partial or stale answer.
     const current=core.lastAssistant(document);
-    if(document.querySelector(core.STOP) || !current ||
+    if(core.activeStop(document) || !current ||
        core.lastTurnRole(document)!=='assistant' ||
        existingId(current)!==existingId(node) || core.readable(current)!==text)return;
     const identity=core.messageIdentity(current,text,conv);
@@ -79,9 +81,9 @@
   function scan(){
     if(!active)return;
     if(route!==location.href){route=location.href;tabConversation=core.conversation(route);lifecycle.invalidate();stopProbe.reset();structureTrace=null;makeBaseline();}
-    if(sawUserStop){ if(!document.querySelector(core.STOP))sawUserStop=false;return; }
+    if(sawUserStop){ if(!core.activeStop(document))sawUserStop=false;return; }
     const node=core.lastAssistant(document);
-    const stop=document.querySelector(core.STOP);
+    const stop=core.activeStop(document);
     const role=core.lastTurnRole(document);
     scanCount++;
     if(stop)stopEverSeen=true;
@@ -107,7 +109,7 @@
       (async()=>{
         const conv=core.conversation(location.href);
         const node=core.lastAssistant(document);
-        if(!active || !conv || !node || document.querySelector(core.STOP) ||
+        if(!active || !conv || !node || core.activeStop(document) ||
            core.lastTurnRole(document)!=='assistant')throw Error('no_completed_assistant_reply');
         const text=core.readable(node);
         const nodeId=existingId(node);
@@ -116,7 +118,7 @@
         await new Promise(resolve=>setTimeout(resolve,700));
         const latest=core.lastAssistant(document);
         if(!active || core.conversation(location.href)!==conv ||
-           document.querySelector(core.STOP) ||
+           core.activeStop(document) ||
            core.lastTurnRole(document)!=='assistant' ||
            latest!==node || existingId(latest)!==nodeId ||
            core.readable(latest)!==text)throw Error('reply_changed_or_generation_active');
@@ -135,7 +137,7 @@
     }
     if(msg.type==='PREVIEW_CURRENT_REPLY'){
       const node=core.lastAssistant(document);
-      if(!tabConversation || !node || document.querySelector(core.STOP)){
+      if(!tabConversation || !node || core.activeStop(document)){
         reply({ok:false,error:'no_completed_reply_or_generation_active'});return;
       }
       const text=core.readable(node);
@@ -149,7 +151,7 @@
     if(msg.type!=='STAGE_MESSAGE')return;
     (async()=>{
       if(!msg.conversation_id || core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_mismatch');
-      if(document.querySelector(core.STOP))throw Error('generation_active');
+      if(core.activeStop(document))throw Error('generation_active');
       // Modern ChatGPT uses a ProseMirror textbox inside data-chatgpt-composer.
       // Bind only to the active composer: never type into unrelated editable UI.
       const editor=document.querySelector(
@@ -187,7 +189,7 @@
       if(!exact && !visualOnly)throw Error('stage_verification_failed');
       // Re-check routing and generation after insertion. STAGE_ONLY must never click.
       if(core.conversation(location.href)!==msg.conversation_id)throw Error('conversation_changed');
-      if(document.querySelector(core.STOP))throw Error('generation_active');
+      if(core.activeStop(document))throw Error('generation_active');
       if(!msg.auto_send)return {ok:true,status:'STAGED',verification:exact?'EXACT':'VISUAL_LINES'};
       // Background must only set auto_send after a backend-issued, one-time claim.
       if(!msg.claim_id)throw Error('missing_claim');
