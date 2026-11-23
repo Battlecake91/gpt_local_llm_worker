@@ -28,6 +28,10 @@ MAX_CAPTURE_TEXT = 256_000
 MAX_CONVERSATION_ID = 256
 
 
+class ProfileSelection(BaseModel):
+    name: str
+
+
 class Capture(BaseModel):
     schema_version: int
     message_id: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -186,6 +190,16 @@ def create_app(*, db_path: Path, targets_path: Path, token: str,
         return {"enabled": True, "profiles": [
             {"name": p["name"], "model": p["model"], "url": p["url"]}
             for p in profiles], "active": active["name"]}
+
+    @app.post("/api/bridge/v1/ollama/select", dependencies=[Depends(require_token)])
+    def select_ollama_profile(selection: ProfileSelection):
+        if analyzer is None:
+            raise HTTPException(404, "Ollama disabled")
+        try:
+            analyzer.profiles.select(selection.name)
+        except (AnalysisError, OSError, ValueError) as exc:
+            raise HTTPException(422, "Invalid Ollama profile") from exc
+        return {"active": selection.name}
 
     @app.get("/api/bridge/v1/ollama/suggestions", dependencies=[Depends(require_token)])
     def list_ollama_suggestions():
