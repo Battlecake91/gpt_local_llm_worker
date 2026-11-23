@@ -111,6 +111,11 @@ class OllamaPhase1Tests(unittest.TestCase):
         with self.assertRaisesRegex(AnalysisError, "ollama_unavailable"):
             analyzer.analyze(ANSWER, {"nas"})
 
+    def test_windows_utf8_bom_profile_is_supported(self):
+        content = self.profile_path.read_text(encoding="utf-8")
+        self.profile_path.write_text(content, encoding="utf-8-sig")
+        self.assertEqual(ProfileStore(self.profile_path).load()[0]["name"], "local")
+
     def test_malformed_config_is_rejected(self):
         config = json.loads(self.profile_path.read_text(encoding="utf-8"))
         config["active"] = "not-configured"
