@@ -117,6 +117,32 @@ class OllamaAnalyzer:
         self.profiles = profiles
         self.client = client
 
+    def available_models(self) -> list[str]:
+        """Explicit read-only connectivity test and model discovery."""
+        profile, _ = self.profiles.load()
+        token = os.environ.get(profile["auth_env"]) if profile["auth_env"] else None
+        if profile["auth_env"] and not token:
+            raise AnalysisError("missing_ollama_auth")
+        headers = {"Authorization": "Bearer " + token} if token else {}
+        try:
+            if self.client is not None:
+                response = self.client.get(profile["url"].rstrip("/") + "/api/tags",
+                                           headers=headers, timeout=profile["timeout_seconds"])
+            else:
+                with httpx.Client(trust_env=False) as client:
+                    response = client.get(profile["url"].rstrip("/") + "/api/tags",
+                                          headers=headers, timeout=profile["timeout_seconds"])
+            response.raise_for_status()
+            models = response.json()["models"]
+            if not isinstance(models, list):
+                raise ValueError("invalid_model_listing")
+            names = [m["name"] for m in models]
+            if any(not isinstance(name, str) or len(name) > 200 for name in names):
+                raise ValueError("invalid_model_name")
+            return names[:100]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            raise AnalysisError("ollama_unavailable_or_invalid_response") from exc
+
     def analyze(self, text: str, allowed_hosts: set[str]) -> Suggestion | None:
         if not isinstance(text, str) or len(text) > MAX_TEXT:
             raise AnalysisError("invalid_capture_text")
