@@ -19,6 +19,26 @@ PROMPT_LINE = re.compile(r"(?m)^[ \t]*\$[ \t]+([^\r\n]+)[ \t]*$")
 RISKS = {"green", "yellow", "red"}
 MAX_TEXT = 256_000
 
+# This is a deliberately narrow source-text resolver, not an LLM override.
+# Inspect only instructions preceding the first eligible command span.
+_HOST_MENTIONS = (
+    ("backup-nas", re.compile(r"(?i)(?<![\\w-])(?:backup[- ]nas|backup[- ]server)(?![\\w-])")),
+    ("vserver", re.compile(r"(?i)(?<![\\w-])(?:vserver|v[- ]server)(?![\\w-])")),
+    ("nas", re.compile(r"(?i)(?<![\\w-])nas(?![\\w-])")),
+)
+
+
+def explicit_host(text: str, allowed_hosts: set[str]) -> str | None:
+    """Resolve only one explicitly named target, never invent a destination."""
+    mentions: set[str] = set()
+    for alias, pattern in _HOST_MENTIONS:
+        if alias in allowed_hosts and pattern.search(text):
+            mentions.add(alias)
+    # 'backup-nas' contains an independent 'nas' token after the hyphen
+    # only in some regexes; the negative lookbehind above prevents that.
+    return next(iter(mentions)) if len(mentions) == 1 else None
+
+
 
 class AnalysisError(ValueError):
     pass
@@ -230,6 +250,21 @@ class OllamaAnalyzer:
         host = result["host"]
         if host is not None and (not isinstance(host, str) or host not in allowed_hosts):
             raise AnalysisError("host_not_allowlisted")
+        # Only the explanatory text before the first command source may identify
+        # an explicit destination. Text inside command blocks is untrusted data.
+        preface = text
+        positions = [m.start() for m in FENCE.finditer(text)]
+        positions += [m.start() for m in PROMPT_LINE.finditer(FENCE.sub("", text))]
+        if positions:
+            # Fenced source begins at its actual source offset.
+            preface = text[:min(positions)] if FENCE.search(text) else text[:min(positions)]
+        stated_host = explicit_host(preface, allowed_hosts)
+        if stated_host is not None:
+            if host is None:
+                host = stated_host
+            elif host != stated_host:
+                # Model and explicit source disagree. Require manual review.
+                host = None
         risk, reason = result["risk"], result["reason"]
         if not isinstance(risk, str) or risk not in RISKS or not isinstance(reason, str) or not 1 <= len(reason) <= 300:
             raise AnalysisError("invalid_risk")
