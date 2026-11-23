@@ -108,7 +108,7 @@ Im Brave-Seitenpanel unter **Letzte Antwort** lassen sich über **Tabs aktualisi
 
 ## Ollama Phase 1 (Opt-in, ohne SSH-Ausführung)
 
-Normale ChatGPT-Antworten mit vollständigen `bash`-/`sh`-/`shell`-/`console`-Codeblöcken können nun optional vom lokalen Ollama klassifiziert werden. Das Modell darf **nur unveränderte vollständige Codeblöcke** übernehmen; ein erfundener, veränderter oder nicht allowlisteter Auftrag wird abgewiesen. Unklare Ziele erzeugen keinen LIVE-Batch. Risikobewertung und Befehle werden ausschließlich für die spätere Prüfung persistiert. **Keine automatische Freigabe, keine SSH-Ausführung, kein Auto-Send.**
+Normale ChatGPT-Antworten mit vollständigen `bash`-/`sh`-/`shell`-/`console`- oder unbeschrifteten Codeblöcken sowie expliziten `$ befehl`-Terminalzeilen können nun optional vom lokalen Ollama klassifiziert werden. Das Modell darf **nur unveränderte vollständige Codeblöcke** übernehmen; ein erfundener, veränderter oder nicht allowlisteter Auftrag wird abgewiesen. Unklare Ziele erzeugen keinen LIVE-Batch. Risikobewertung und Befehle werden ausschließlich für die spätere Prüfung persistiert. **Keine automatische Freigabe, keine SSH-Ausführung, kein Auto-Send.**
 
 Kopiere `config/ollama-profiles.example.json` in ein lokales, zugriffsgeschütztes Verzeichnis außerhalb des Repositories, passe aktive Modelle/Server an und starte den bereits bestehenden separaten LIVE-Capture-Server mit dem zusätzlichen Argument `--ollama-profiles ABSOLUTER_PFAD`. Ohne dieses Argument arbeitet er weiter mit dem bisherigen JSON-Parser. Bearer-Authentifizierung bleibt unverändert. Optional: `auth_env` verweist auf den Namen einer ausschließlich lokal gesetzten Token-Umgebungsvariablen.
 
