@@ -144,7 +144,7 @@ function conversationFromUrl(url){
   try{
     const u=new URL(url);
     if(u.origin!=='https://chatgpt.com')return null;
-    const match=u.pathname.match(/^(?:\\/c|\\/g\\/g-p-[A-Za-z0-9-]+\\/c)\\/([A-Za-z0-9-]+)\\/?$/);
+    const match=u.pathname.match(/^(?:\/c|\/g\/g-p-[A-Za-z0-9-]+\/c)\/([A-Za-z0-9-]+)\/?$/);
     return match?match[1]:null;
   }catch{return null;}
 }
