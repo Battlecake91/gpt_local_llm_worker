@@ -127,7 +127,8 @@ class OllamaPhase1Tests(unittest.TestCase):
 
     def test_ambiguous_host_never_creates_live_batch(self):
         self.result["host"] = None
-        self.assertIsNone(self.analyze().batch("b" * 64))
+        text = "Diagnose:\n\n```bash\nzpool status\n```"
+        self.assertIsNone(self.analyze(text).batch("b" * 64))
 
     def test_model_marks_example_nonactionable(self):
         self.result.update(actionable=False, commands=[])
