@@ -7,15 +7,15 @@ const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
 const approval=text=>({job_id:'job-1',approval_id:'approved-1',host_id:'lab-host',command_sha256:digest('host=lab-host;commands=uptime'),result_sha256:digest(text)});
 const approvalGrant=(item)=>({allowed:true,claim_id:'claim123',kind:'approved_ssh_result',outbound_id:item.id,conversation_id:item.conversation_id,tab_id:item.tab_id,...item.approval});
 const source=fs.readFileSync(require('node:path').join(__dirname,'../extension/background.js'),'utf8');
-function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,rejectToken=null,initialStore={},browserTabs=[]}={}){
-  const store=new Map(Object.entries(initialStore)),calls=[],sent=[];const listeners={},s={};
+function harness({items=[],grant={allowed:false},tabConv='abc',failCapture=false,rejectToken=null,initialStore={},browserTabs=[],missingReceiver=false}={}){
+  const store=new Map(Object.entries(initialStore)),calls=[],sent=[],injected=[];let receiverPresent=!missingReceiver;const listeners={},s={};
   const runtime={onMessage:{addListener:fn=>listeners.message=fn},sendMessage:async()=>{},getURL:path=>'chrome-extension://testid/'+path};
-  const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>browserTabs.length?browserTabs.find(t=>t.id===id)||null:{id,url:'https://chatgpt.com/c/abc'},sendMessage:async(id,msg)=>{sent.push(msg);if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async options=>options?.active?browserTabs.filter(t=>t.active):browserTabs},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
+  const chrome={runtime,storage:{local:{get:async keys=>Object.fromEntries((Array.isArray(keys)?keys:[keys]).map(k=>[k,store.get(k)])),set:async data=>{Object.entries(data).forEach(([k,v])=>store.set(k,v));},remove:async key=>store.delete(key),setAccessLevel:async()=>{}}},tabs:{onRemoved:{addListener:()=>{}},get:async id=>browserTabs.length?browserTabs.find(t=>t.id===id)||null:{id,url:'https://chatgpt.com/c/abc'},sendMessage:async(id,msg)=>{sent.push(msg);if(!receiverPresent)throw Error('Could not establish connection. Receiving end does not exist.');if(msg.type==='GET_TAB_STATE')return {conversation_id:tabConv};return {ok:true,status:msg.auto_send?'SUBMIT_CLICKED':'STAGED'}},query:async options=>options?.active?browserTabs.filter(t=>t.active):browserTabs},scripting:{executeScript:async details=>{injected.push(details);receiverPresent=true;}},sidePanel:{setPanelBehavior:async()=>{}},alarms:{create:()=>{},onAlarm:{addListener:()=>{}}}};
   const fetch=async(url,opt={})=>{calls.push({url,opt});if(rejectToken && opt.headers?.Authorization===`Bearer ${rejectToken}`)return {ok:false,status:401};if(url.endsWith('/captures')&&failCapture)throw Error('offline');let data;if(url.endsWith('/outbound'))data={items};else if(url.endsWith('/claim'))data=grant;else if(url.endsWith('/captures')){const o=JSON.parse(opt.body);data={message_id:o.message_id,status:'accepted'}}else data={status:'accepted'};return {ok:true,json:async()=>data}};
   const context={chrome,fetch,AbortSignal:{timeout:()=>undefined},URL,Date,Promise,Map,Set,JSON,encodeURIComponent,console,crypto:webcrypto,TextEncoder};
   vm.runInNewContext(source,context);
   async function event(msg,sender={tab:{id:1}}){let replyValue;listeners.message(msg,sender,v=>replyValue=v);await new Promise(resolve=>setTimeout(resolve,20));return replyValue;}
-  return {event,store,calls,sent};
+  return {event,store,calls,sent,injected};
 }
 test('stage-only never clicks send and acknowledges staging',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'STAGE_ONLY',text:'hello'}]});await h.event({type:'SET_TOKEN',token:'test'});assert.ok(h.sent.some(x=>x.type==='STAGE_MESSAGE'&&x.auto_send===false));assert.ok(h.calls.some(x=>x.url.endsWith('/ack')));});
 test('auto-send denied without verified claim',async()=>{const h=harness({items:[{id:'x',tab_id:1,conversation_id:'abc',mode:'AUTO_SEND_APPROVED_RESULT',text:'hello'}]});await h.event({type:'SET_TOKEN',token:'test'});assert.ok(!h.sent.some(x=>x.type==='STAGE_MESSAGE'));});
@@ -273,4 +273,32 @@ test('untrusted sender cannot enumerate or capture selected tabs',async()=>{
     assert.equal(res.error,'untrusted_capture_sender');
   }
   assert.equal(h.sent.length,0);
+});
+
+test('manual capture repairs missing receiver exactly once for selected tab',async()=>{
+  const h=harness({missingReceiver:true,browserTabs:[
+    {id:12,active:true,url:'https://chatgpt.com/g/g-p-work/c/def',title:'Work'},
+    {id:13,active:false,url:'https://chatgpt.com/c/abc',title:'Other'},
+  ]});
+  const response=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:12,conversation_id:'def'},
+    {url:'chrome-extension://testid/panel.html'});
+  assert.equal(response.ok,true);
+  assert.equal(h.injected.length,1);
+  assert.equal(h.injected[0].target.tabId,12);
+  assert.equal(h.sent.filter(m=>m.type==='CAPTURE_CURRENT_REPLY').length,2);
+});
+test('manual capture does not inject on changed chat or untrusted sender',async()=>{
+  const h=harness({missingReceiver:true,browserTabs:[
+    {id:12,active:true,url:'https://chatgpt.com/c/def'},
+  ]});
+  const sender={url:'chrome-extension://testid/panel.html'};
+  const stale=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:12,conversation_id:'abc'},sender);
+  assert.equal(stale.ok,false);
+  assert.equal(h.injected.length,0);
+  const bad=await h.event({type:'CAPTURE_CURRENT_FROM_PANEL',
+    tab_id:12,conversation_id:'def'},{tab:{id:12},url:'https://chatgpt.com/c/def'});
+  assert.equal(bad.ok,false);
+  assert.equal(h.injected.length,0);
 });
