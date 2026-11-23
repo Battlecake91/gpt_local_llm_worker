@@ -2,6 +2,7 @@
 const BASE='http://127.0.0.1:8765/api/bridge/v1';
 const pending=new Map(), busy=new Set();
 let sessionToken=''; // Cached after protected extension-local storage has been loaded.
+let authRejected=false; // Stop replay storms until the operator replaces the token.
 let credentialsReady=null;
 const TOKEN_KEY='workerBearerToken';
 // Do not expose persisted tokens to content scripts. Fail closed if Chromium
@@ -26,7 +27,9 @@ async function config(){
 }
 async function api(path,options={}){
   const token=await config();if(!token)throw Error('worker_token_not_configured');
+  if(authRejected)throw Error('worker_http_401_token_rejected');
   const response=await fetch(BASE+path,{...options,headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json',...(options.headers||{})},signal:AbortSignal.timeout(7500)});
+  if(response.status===401){authRejected=true;throw Error('worker_http_401_token_rejected');}
   if(!response.ok)throw Error(`worker_http_${response.status}`);
   state.connected=true;
   return response.json();
@@ -66,6 +69,10 @@ async function submitCapture(payload,tabId){
   await flushCaptures();
 }
 async function flushCaptures(){
+  if(authRejected){
+    await chrome.storage.local.set({pendingCaptures:[...pending.values()]});
+    return;
+  }
   for(const [id,item] of pending){
     if(busy.has(id))continue;busy.add(id);
     try{const ack=await api('/captures',{method:'POST',body:JSON.stringify(item.payload)});
@@ -73,6 +80,7 @@ async function flushCaptures(){
       pending.delete(id);state.lastTransfer={id,status:ack.status,at:new Date().toISOString()};state.error=null;
     }catch(e){item.attempt++;state.connected=false;state.error=String(e);}
     finally{busy.delete(id);state.pending=pending.size;broadcast();}
+    if(authRejected)break;
   }
   await chrome.storage.local.set({pendingCaptures:[...pending.values()]});
 }
@@ -206,7 +214,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       const token=String(msg.token||'');
       if(!token || token.length>4096)throw Error('invalid_worker_token');
       await chrome.storage.local.set({[TOKEN_KEY]:token});
-      sessionToken=token;state.tokenSaved=true;broadcast();
+      sessionToken=token;authRejected=false;state.tokenSaved=true;broadcast();
       await cycle();
       reply({ok:true});
     })().catch(e=>reply({ok:false,error:String(e)}));
@@ -216,7 +224,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
     (async()=>{
       await credentials();
       await chrome.storage.local.remove(TOKEN_KEY);
-      sessionToken='';state.tokenSaved=false;state.connected=false;broadcast();
+      sessionToken='';authRejected=false;state.tokenSaved=false;state.connected=false;broadcast();
       reply({ok:true});
     })().catch(e=>reply({ok:false,error:String(e)}));
     return true;
