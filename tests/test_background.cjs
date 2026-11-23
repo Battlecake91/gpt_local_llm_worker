@@ -302,3 +302,27 @@ test('manual capture does not inject on changed chat or untrusted sender',async(
   assert.equal(bad.ok,false);
   assert.equal(h.injected.length,0);
 });
+
+test('Ollama analyses are read-only and visible only to the trusted sidepanel',async()=>{
+  const h=harness({initialStore:{workerBearerToken:'test'}});
+  const before=h.calls.length;
+  for(const type of ['LIST_OLLAMA_SUGGESTIONS','LIST_OLLAMA_PROFILES']){
+    const rejected=await h.event({type},{tab:{id:1},url:'https://chatgpt.com/c/abc'});
+    assert.equal(rejected.ok,false);
+    assert.equal(rejected.error,'untrusted_ollama_sender');
+  }
+  assert.equal(h.calls.length,before);
+  const trusted={url:'chrome-extension://testid/panel.html'};
+  const listed=await h.event({type:'LIST_OLLAMA_SUGGESTIONS'},trusted);
+  const profiles=await h.event({type:'LIST_OLLAMA_PROFILES'},trusted);
+  assert.equal(listed.ok,true);
+  assert.ok(Array.isArray(listed.items));
+  assert.equal(profiles.ok,true);
+  assert.equal(profiles.enabled,false);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/ollama/suggestions')).length,1);
+  assert.equal(h.calls.filter(x=>x.url.endsWith('/ollama/profiles')).length,1);
+  assert.equal(h.calls.filter(x=>x.opt.method==='POST' &&
+    (x.url.includes('/approve') || x.url.includes('/execute') ||
+     x.url.includes('/ollama/select'))).length,0);
+  assert.equal(h.sent.filter(x=>x.type==='STAGE_MESSAGE').length,0);
+});
