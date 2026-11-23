@@ -72,7 +72,8 @@
     if(lastProcessed===identity || baseline.has(`${existingId(node)}\u0000${text}`))return;
     lastProcessed=identity;
     const id=await digest(identity);
-    chrome.runtime.sendMessage({type:'CAPTURE',payload:{schema_version:1,message_id:id,conversation_id:conv,text,observed_at:new Date().toISOString()}}).catch(err=>status('ERROR',{error:String(err)}));
+    const user_prompt=core.userPromptBefore(document,current);
+    chrome.runtime.sendMessage({type:'CAPTURE',payload:{schema_version:1,message_id:id,conversation_id:conv,text,user_prompt,observed_at:new Date().toISOString()}}).catch(err=>status('ERROR',{error:String(err)}));
   }});
   // Capture deliberate Stop button clicks in capture phase, before ChatGPT removes it.
   document.addEventListener('click',e=>{
@@ -113,6 +114,7 @@
            core.lastTurnRole(document)!=='assistant')throw Error('no_completed_assistant_reply');
         const text=core.readable(node);
         const nodeId=existingId(node);
+        const user_prompt=core.userPromptBefore(document,node);
         if(!text.trim())throw Error('empty_reply');
         // Require that the same message text remains stable before capture.
         await new Promise(resolve=>setTimeout(resolve,700));
@@ -121,12 +123,13 @@
            core.activeStop(document) ||
            core.lastTurnRole(document)!=='assistant' ||
            latest!==node || existingId(latest)!==nodeId ||
-           core.readable(latest)!==text)throw Error('reply_changed_or_generation_active');
+           core.readable(latest)!==text ||
+           core.userPromptBefore(document,latest)!==user_prompt)throw Error('reply_changed_or_generation_active');
         const identity=core.messageIdentity(node,text,conv);
         const message_id=await digest(identity);
         if(lastProcessed===identity)return {ok:true,status:'already_captured',message_id};
         const response=await chrome.runtime.sendMessage({type:'CAPTURE',payload:{
-          schema_version:1,message_id,conversation_id:conv,text,
+          schema_version:1,message_id,conversation_id:conv,text,user_prompt,
           observed_at:new Date().toISOString()
         }});
         if(!response?.ok)throw Error(response?.error||'capture_not_queued');
