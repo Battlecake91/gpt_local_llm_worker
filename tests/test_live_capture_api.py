@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from worker.live_approval import LiveApprovalLedger
 from worker.live_capture_api import create_app
-from worker.operator_hosts import parse_public_host_key
 
 
 # Pure fixture key: no private keys, hosts, browser, or network operations.
@@ -103,8 +102,8 @@ class LiveCaptureAPITests(unittest.TestCase):
         self.assertEqual(self.client.get(path).status_code, 401)
         response = self.client.get(path, headers=self.auth)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()["items"]), 1)
-        self.assertEqual(response.json()["items"][0]["status"], "PROPOSED")
+        # Mock panel cannot impersonate the local LIVE approval UI.
+        self.assertEqual(response.json()["items"], [])
         self.assertEqual(self.client.post(
             path + "/live-001/approve", headers=self.auth,
             json={}).status_code, 404)
