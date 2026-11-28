@@ -42,7 +42,7 @@ Abnahme: Nur aktivierte Tabs erscheinen, User- und Assistant-Nachrichten stimmen
 - Nur **im DOM vorhandene** Nachrichten werden erfasst. ChatGPT kann lange Unterhaltungen virtualisieren. Das ist keine Zusage über vollständige historische Chats, auch wenn viele alte Turns sichtbar sind.
 - Das Feld `complete` ist in Phase 1 lediglich ein UI-Indikator aus Stop-Button und zwei stabilen Abtastungen, **keine Autorisierung für Aktionen**. Ein stärkerer Abschlussnachweis wird vor dem LLM-Task-Trigger nötig.
 - Bei UI-Änderungen von ChatGPT sind DOM-Selektoren erneut zu testen.
-- SQLite hält die zuletzt empfangenen Snapshots auch nach Ablauf eines Tabs vor; die GUI markiert solche Tabs als nicht erreichbar. Automatische Datenlöschung als Folgefeature entscheiden.
+- Die GUI markiert Tabs nach 18 s ohne Snapshot als offline. Nach 60 s ohne Lebenszeichen werden deren gespeicherte Nachrichten beim nächsten GUI-Abgleich automatisch gelöscht.
 - Die aktuelle GUI ist ein Fenster mit lokalem API-Thread, noch kein separat betriebener Tray-Dienst.
 - Bei GUI-Neustart wird ein neues zufälliges Token generiert. Im Browser-Popup erneut speichern.
 - Benutzer-Aktionen und Rückmeldungen in ChatGPT bewusst noch nicht implementiert.
