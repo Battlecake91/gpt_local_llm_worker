@@ -5,7 +5,7 @@ const vm=require("node:vm");
 const path=require("node:path");
 const source=fs.readFileSync(path.join(__dirname,"../extension-active/background.js"),"utf8");
 
-function setup() {
+function setup({serverExtensionId="a".repeat(32)}={}) {
   const listeners={},store={local:{bridgeToken:"x".repeat(64)},session:{}};
   const tabs=[
     {id:11,windowId:1,active:true,title:"Andere Seite",url:"https://example.org/"},
@@ -15,6 +15,7 @@ function setup() {
   ];
   const chrome={
     runtime:{
+      id:"a".repeat(32),
       getURL:p=>"chrome-extension://"+"a".repeat(32)+"/"+p,
       onMessage:{addListener:f=>listeners.message=f},
       onStartup:{addListener:f=>listeners.startup=f}
@@ -46,7 +47,7 @@ function setup() {
   const requests=[];
   const fetch=async(uri,options)=>{
     requests.push({uri,options});
-    return {ok:true,json:async()=>({ok:true})};
+    return {ok:true,json:async()=>({ok:true,extension_id:serverExtensionId})};
   };
   vm.runInNewContext(source,{chrome,fetch,URL,AbortSignal,
     setTimeout,console});
@@ -91,3 +92,17 @@ test("content scripts cannot enumerate browser tabs or toggle monitoring",async(
     assert.equal(result.error,"popup_only");
   }
 });
+
+test("health pairing rejects worker configured for another extension", async()=>{
+  const h=setup({serverExtensionId:"b".repeat(32)});
+  const result=await h.invoke({type:"ACTIVE_GET"});
+  assert.equal(result.ok,true);
+  assert.equal(result.connected,false);
+  assert.equal(result.connectionError,"worker_extension_id_mismatch");
+  const rejected=await h.invoke({
+    type:"ACTIVE_TOGGLE",tab_id:22,conversation_id:"chat-222"
+  });
+  assert.equal(rejected.ok,false);
+  assert.equal(rejected.error,"worker_extension_id_mismatch");
+});
+
