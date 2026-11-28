@@ -56,3 +56,12 @@ Abnahme: Nur aktivierte Tabs erscheinen, User- und Assistant-Nachrichten stimmen
 
 ## Nächster Schritt
 Realen Browser- und GUI-Abgleich durchführen, DOM-Lücken und Snapshot-Grenzen prüfen, dann LLM-Modul auf Chat-Snapshots ansetzen und taskbasierte Benachrichtigungen bauen. SSH bleibt separat.
+
+## Live-Befund und Fehlerkorrektur: Chat-Tab im Popup fehlt (2026-11-28)
+
+- Benutzer sieht funktionsfähiges Erweiterungspopup, aber `Kein geöffneter ChatGPT-Chat in diesem Tab` und `Worker nicht erreichbar / Token fehlt`.
+- Identifizierte Schwachstelle: `chrome.tabs.query({active:true,currentWindow:true})` erfasst nur einen aktiven Tab und scheitert, wenn der ChatGPT-Tab in einem anderen Fenster liegt. Das Popup listet jetzt sämtliche geöffneten ChatGPT-Konversationen aus allen normalen Browserfenstern und verlangt eine explizite Auswahl der Chat-/Tab-ID vor Aktivierung. Navigation / Schließen / ID-Konflikt deaktivieren die Überwachung weiterhin.
+- Identifizierter zweiter Mangel: API hatte einen Origin-Check, aber keine CORS-Preflight-Unterstützung für den `Authorization`-Header der Erweiterung. Neue streng begrenzte CORS-Middleware erlaubt nur `chrome-extension://<konfigurierte-ID>` und `GET,POST,DELETE`; andere Origins werden abgewiesen.
+- Popup unterscheidet jetzt `Token fehlt`, `401 Token ungültig`, `403 Extension-ID stimmt nicht` und `Worker nicht erreichbar`.
+- Nach `git pull --ff-only` reicht Erweiterung unter `brave://extensions` neu laden; bei neuer Erweiterungs-ID muss die PySide6-Anwendung mit genau dieser ID gestartet sein. Den Token aus der GUI im neuen Popup eingeben und ChatGPT-Tab aus Dropdown auswählen.
+- Python-Regression: OPTIONS/CORS-Preflight von Extension-Origin (inkl. Negativfall); JavaScript-Regression: Mehrfenster-Tabs, explizite Tab-ID-Bindung, Ablehnung ungültiger Ziele, untrusted sender. **Echter Windows-Brave-Retest ausstehend**.
