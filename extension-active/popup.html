@@ -9,6 +9,8 @@
   input {width:100%; box-sizing:border-box; padding:9px; background:#252b35; color:white; border:1px solid #697383; border-radius:6px}
   button {padding:9px 12px; background:#3478d7; color:white; border:0; border-radius:6px; cursor:pointer}
   button:disabled {opacity:.5}
+  select {width:100%; box-sizing:border-box; padding:9px; background:#252b35; color:white; border:1px solid #697383; border-radius:6px}
+  #reload-tabs {background:#485467; font-size:12px; padding:6px 10px}
   .line {margin:12px 0; display:flex; align-items:center; justify-content:space-between; gap:10px}
   .small {color:#a5adbb; font-size:12px}
   #status {white-space:pre-wrap; color:#cad4e4}
@@ -20,7 +22,10 @@
 <label for="token">Token aus der PySide6-Anwendung</label>
 <div class="line"><input id="token" type="password" placeholder="Token einfügen"><button id="save">Speichern</button></div>
 <hr>
-<div class="line"><strong>Aktuellen Chat überwachen</strong><button id="toggle">Aktivieren</button></div>
+<div class="line"><strong>Geöffnete ChatGPT-Chats</strong><button id="reload-tabs" type="button">Aktualisieren</button></div>
+<label for="chat-tabs" class="small">Chat zur Überwachung auswählen</label>
+<select id="chat-tabs" aria-label="Geöffnete Chats"><option value="">ChatGPT-Tabs werden gesucht …</option></select>
+<div class="line"><strong>Ausgewählten Chat überwachen</strong><button id="toggle" disabled>Aktivieren</button></div>
 <p id="detail" class="small"></p>
 <p id="status" role="status"></p>
 <script src="popup.js"></script>
