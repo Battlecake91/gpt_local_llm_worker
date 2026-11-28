@@ -30,6 +30,12 @@ async function api(path, method="GET", body=null) {
   if (!response.ok) throw Error("worker_http_"+response.status);
   return response.json();
 }
+async function verifiedHealth() {
+  const result = await api("/v2/health");
+  if (result?.extension_id !== chrome.runtime.id)
+    throw Error("worker_extension_id_mismatch");
+  return result;
+}
 function parseChat(url) {
   try {
     const u = new URL(url);
@@ -123,11 +129,11 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       const active=await enabled();
       const tabs=await listChatTabs();
       let connected=false, connectionError=null;
-      try { await api("/v2/health"); connected=true; }
+      try { await verifiedHealth(); connected=true; }
       catch(e) { connectionError=String(e.message||e); }
       return {ok:true, connected, connectionError, tokenSaved:!!(await getToken()),
         tabs:tabs.map(t=>({...t,enabled:active[t.tab_id]===t.conversation_id})),
-        count:Object.keys(active).length};
+        count:Object.keys(active).length, extensionId:chrome.runtime.id};
     }
     if (msg.type==="ACTIVE_SET_TOKEN") {
       if (typeof msg.token!=="string" || msg.token.length<32 || msg.token.length>256)
@@ -143,7 +149,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
         return {ok:true,active:false};
       }
       // Activation is always explicit, scoped to the selected tab + chat ID.
-      await api("/v2/health");
+      await verifiedHealth();
       active[tab.id]=msg.conversation_id;
       await chrome.storage.session.set({[ACTIVE]:active});
       void reconcileTab(tab.id,msg.conversation_id);
