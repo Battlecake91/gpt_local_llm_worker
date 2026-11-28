@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 MAX_MESSAGES = 500
 MAX_TEXT = 256_000
 MAX_TOTAL = 2_000_000
-STALE_SECONDS = 18
+STALE_SECONDS = 90
 
 
 class ChatMessage(BaseModel):
@@ -100,7 +100,7 @@ class ChatStore:
             # Expired tabs are not monitored. Remove abandoned snapshots even
             # when the browser was killed before it could send DELETE.
             old = [row[0] for row in db.execute(
-                "SELECT tab_id FROM chats WHERE updated_at < ?", (now - 60,))]
+                "SELECT tab_id FROM chats WHERE updated_at < ?", (now - 240,))]
             for tab_id in old:
                 db.execute("DELETE FROM messages WHERE tab_id=?", (tab_id,))
                 db.execute("DELETE FROM chats WHERE tab_id=?", (tab_id,))
