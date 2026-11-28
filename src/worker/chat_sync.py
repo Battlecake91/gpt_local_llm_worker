@@ -134,8 +134,11 @@ def create_app(store: ChatStore, token: str, extension_id: str) -> FastAPI:
 
     @app.middleware("http")
     async def require_browser_origin(request, call_next):
-        # Browsers supply Origin for extension fetches. Reject web pages.
-        if request.headers.get("origin") != origin:
+        # Privileged extension fetches may omit Origin. Those requests must
+        # still present the strong bearer token at the endpoint.
+        # A supplied Origin is always checked against the configured extension.
+        supplied_origin = request.headers.get("origin")
+        if supplied_origin is not None and supplied_origin != origin:
             return JSONResponse({"detail": "invalid_origin"}, status_code=403)
         return await call_next(request)
 
@@ -161,7 +164,7 @@ def create_app(store: ChatStore, token: str, extension_id: str) -> FastAPI:
     @app.get("/v2/health")
     def health(authorization: str | None = Header(default=None)):
         authenticate(authorization)
-        return {"ok": True}
+        return {"ok": True, "extension_id": extension_id}
 
     # Explicit extension authorization header triggers a CORS preflight.
     # Wrap the origin-checking middleware so OPTIONS can be answered safely.
