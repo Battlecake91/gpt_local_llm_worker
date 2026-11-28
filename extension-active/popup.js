@@ -24,8 +24,10 @@ async function refresh() {
     el("connection").textContent=workerOnline?"Worker verbunden":
       !response.tokenSaved?"Token fehlt. Bitte aus PySide6 kopieren.":
       problem==="worker_http_401"?"Token ungültig oder GUI neu gestartet.":
-      problem==="worker_http_403"?"Erweiterungs-ID stimmt nicht mit GUI überein.":
+      problem==="worker_extension_id_mismatch"?"Erweiterungs-ID stimmt nicht mit GUI überein.":
+      problem==="worker_http_403"?"HTTP 403: Anfrage durch Origin-Prüfung abgelehnt. GUI-ID und laufenden Prozess auf Port 8766 prüfen.":
       "Worker nicht erreichbar: "+(problem||"Unbekannter Fehler");
+    el("extension-id").textContent="Erweiterungs-ID: "+String(response.extensionId||chrome.runtime.id);
     const previous=el("chat-tabs").value;
     tabs=new Map();
     const select=el("chat-tabs");
