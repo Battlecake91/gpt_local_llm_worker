@@ -102,3 +102,31 @@ def test_multiple_tabs_are_independent():
             assert client.delete("/v2/tabs/19", headers=HEADERS).status_code == 200
             assert len(store.list()) == 1
             assert store.list()[0]["tab_id"] == 27
+
+def test_extension_cors_preflight_allows_authenticated_headers():
+    with tempfile.TemporaryDirectory() as root:
+        store = ChatStore(Path(root) / "chat.db")
+        with TestClient(create_app(store, TOKEN, EXT)) as client:
+            response = client.options("/v2/health", headers={
+                "Origin": ORIGIN,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            })
+            assert response.status_code == 200, response.text
+            assert response.headers["access-control-allow-origin"] == ORIGIN
+            assert "authorization" in response.headers["access-control-allow-headers"].lower()
+
+            response = client.options("/v2/snapshot", headers={
+                "Origin": ORIGIN,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            })
+            assert response.status_code == 200, response.text
+
+            rejected = client.options("/v2/snapshot", headers={
+                "Origin": "https://chatgpt.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization",
+            })
+            assert rejected.status_code == 400
+            assert rejected.headers.get("access-control-allow-origin") != "https://chatgpt.com"
