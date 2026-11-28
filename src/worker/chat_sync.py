@@ -97,6 +97,13 @@ class ChatStore:
     def list(self):
         now = time.time()
         with self.lock, self.connect() as db:
+            # Expired tabs are not monitored. Remove abandoned snapshots even
+            # when the browser was killed before it could send DELETE.
+            old = [row[0] for row in db.execute(
+                "SELECT tab_id FROM chats WHERE updated_at < ?", (now - 60,))]
+            for tab_id in old:
+                db.execute("DELETE FROM messages WHERE tab_id=?", (tab_id,))
+                db.execute("DELETE FROM chats WHERE tab_id=?", (tab_id,))
             rows = db.execute(
                 "SELECT tab_id,conversation_id,title,generating,updated_at "
                 "FROM chats ORDER BY updated_at DESC").fetchall()
