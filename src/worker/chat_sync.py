@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 MAX_MESSAGES = 500
@@ -162,4 +163,13 @@ def create_app(store: ChatStore, token: str, extension_id: str) -> FastAPI:
         authenticate(authorization)
         return {"ok": True}
 
+    # Explicit extension authorization header triggers a CORS preflight.
+    # Wrap the origin-checking middleware so OPTIONS can be answered safely.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[origin],
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+        max_age=600,
+    )
     return app
