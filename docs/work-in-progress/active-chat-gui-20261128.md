@@ -33,7 +33,7 @@ py -m worker.chat_sync_gui --extension-id laogocebnhllcalglgakemfeadmheppo
 3. In der GUI auf **Bridge-Token kopieren** klicken, in das Popup der neuen Erweiterung eintragen → **Speichern**.
 4. In einem geöffneten ChatGPT-Chat im Popup **Aktivieren**. Erst dann werden dessen sichtbare Nachrichten an die GUI übertragen.
 5. Mehrere ChatGPT-Tabs getrennt aktivieren. Die GUI zeigt die Nachrichtentexte je Tab und aktualisiert sich laufend.
-6. Deaktivieren oder Tab schließen stoppt die Synchronisierung. Bei ausbleibenden Snapshots zeigt die GUI den Tab nach 18 s als nicht erreichbar.
+6. Deaktivieren oder Tab schließen stoppt die Synchronisierung. Bei ausbleibenden Snapshots zeigt die GUI den Tab nach 90 s als nicht erreichbar. Der MV3-Service-Worker fragt parallel alle aktivierten Tabs alle 30 s explizit ab, damit Hintergrund-Tabs nicht allein von gedrosselten Content-Script-Timern abhängen.
 7. Alte Bridge auf 8765 ist für diese Phase nicht erforderlich. Keine SSH-Freigaben und keine Ollama-Konfiguration.
 
 Abnahme: Nur aktivierte Tabs erscheinen, User- und Assistant-Nachrichten stimmen inklusive Codeblöcken; parallele Tabs bleiben getrennt; Tab-Wechsel, Reload und Schließen stoppen bzw. aktualisieren die Überwachung. Browser-Live-Nachweis ausstehend.
@@ -42,7 +42,7 @@ Abnahme: Nur aktivierte Tabs erscheinen, User- und Assistant-Nachrichten stimmen
 - Nur **im DOM vorhandene** Nachrichten werden erfasst. ChatGPT kann lange Unterhaltungen virtualisieren. Das ist keine Zusage über vollständige historische Chats, auch wenn viele alte Turns sichtbar sind.
 - Das Feld `complete` ist in Phase 1 lediglich ein UI-Indikator aus Stop-Button und zwei stabilen Abtastungen, **keine Autorisierung für Aktionen**. Ein stärkerer Abschlussnachweis wird vor dem LLM-Task-Trigger nötig.
 - Bei UI-Änderungen von ChatGPT sind DOM-Selektoren erneut zu testen.
-- Die GUI markiert Tabs nach 18 s ohne Snapshot als offline. Nach 60 s ohne Lebenszeichen werden deren gespeicherte Nachrichten beim nächsten GUI-Abgleich automatisch gelöscht.
+- Die GUI markiert Tabs nach 90 s ohne Snapshot als offline. Nach 240 s ohne Lebenszeichen werden deren gespeicherte Nachrichten beim nächsten GUI-Abgleich automatisch gelöscht.
 - Die aktuelle GUI ist ein Fenster mit lokalem API-Thread, noch kein separat betriebener Tray-Dienst.
 - Bei GUI-Neustart wird ein neues zufälliges Token generiert. Im Browser-Popup erneut speichern.
 - Benutzer-Aktionen und Rückmeldungen in ChatGPT bewusst noch nicht implementiert.
