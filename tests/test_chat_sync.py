@@ -52,7 +52,17 @@ def test_reject_unauthorized_and_untrusted_page():
     with tempfile.TemporaryDirectory() as root:
         store = ChatStore(Path(root) / "chat.db")
         with TestClient(create_app(store, TOKEN, EXT)) as client:
-            assert client.post("/v2/snapshot", json=fixture()).status_code == 403
+            assert client.post("/v2/snapshot", json=fixture()).status_code == 401
+            # A privileged extension request may omit Origin, but must never
+            # bypass the same bearer-token authentication as other requests.
+            assert client.get("/v2/health", headers={
+                "Authorization": "Bearer " + TOKEN}).status_code == 200
+            assert client.get("/v2/health", headers={
+                "Authorization": "Bearer wrong"}).status_code == 401
+            assert client.post("/v2/snapshot", json=fixture(), headers={
+                "Authorization": "Bearer " + TOKEN}).status_code == 200
+            assert store.list()[0]["tab_id"] == 19
+            store.remove(19)
             assert client.post("/v2/snapshot", json=fixture(),
                                headers={"Origin": "https://chatgpt.com",
                                         "Authorization": "Bearer " + TOKEN}).status_code == 403
@@ -130,3 +140,15 @@ def test_extension_cors_preflight_allows_authenticated_headers():
             })
             assert rejected.status_code == 400
             assert rejected.headers.get("access-control-allow-origin") != "https://chatgpt.com"
+
+def test_health_returns_configured_extension_id_for_diagnostics():
+    with tempfile.TemporaryDirectory() as root:
+        store = ChatStore(Path(root) / "chat.db")
+        with TestClient(create_app(store, TOKEN, EXT)) as client:
+            result = client.get("/v2/health", headers=HEADERS)
+            assert result.status_code == 200
+            assert result.json() == {"ok": True, "extension_id": EXT}
+            denied = client.get("/v2/health", headers={
+                "Origin": "chrome-extension://" + "b" * 32,
+                "Authorization": "Bearer " + TOKEN})
+            assert denied.status_code == 403
