@@ -79,8 +79,12 @@ def test_last_seen_expires_offline():
         with TestClient(create_app(store, TOKEN, EXT)) as client:
             assert client.post("/v2/snapshot", json=fixture(), headers=HEADERS).status_code == 200
             with store.connect() as db:
-                db.execute("UPDATE chats SET updated_at=? WHERE tab_id=19", (time.time()-60,))
+                db.execute("UPDATE chats SET updated_at=? WHERE tab_id=19", (time.time()-30,))
             assert not store.list()[0]["online"]
+            with store.connect() as db:
+                db.execute("UPDATE chats SET updated_at=? WHERE tab_id=19", (time.time()-61,))
+            assert store.list() == []
+            assert store.messages(19) == []
 
 def test_multiple_tabs_are_independent():
     with tempfile.TemporaryDirectory() as root:
