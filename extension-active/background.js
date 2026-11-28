@@ -45,6 +45,34 @@ async function deactivate(tabId) {
   await chrome.storage.session.set({[ACTIVE]:active});
   await api("/v2/tabs/"+tabId,"DELETE").catch(()=>{});
 }
+async function reconcileTab(tabId, conversationId) {
+  if (inFlight.has(Number(tabId))) return;
+  const tab=await chrome.tabs.get(Number(tabId)).catch(()=>null);
+  if (!tab || parseChat(tab.url||"")!==conversationId) {
+    await deactivate(Number(tabId));
+    return;
+  }
+  const result=await chrome.tabs.sendMessage(Number(tabId),
+    {type:"ACTIVE_REQUEST_SNAPSHOT"}).catch(()=>null);
+  if (!result?.snapshot || result.snapshot.conversation_id!==conversationId) return;
+  inFlight.add(Number(tabId));
+  try {
+    await api("/v2/snapshot","POST",{...result.snapshot,tab_id:Number(tabId)});
+  } catch {
+    // Keep activation and retry on the next alarm. Never silently switch chat.
+  } finally { inFlight.delete(Number(tabId)); }
+}
+async function reconcileAll() {
+  const active=await enabled();
+  await Promise.all(Object.entries(active).map(
+    ([tab,conv])=>reconcileTab(tab,conv)));
+}
+chrome.alarms.create("active-chat-sync",{periodInMinutes:0.5});
+chrome.alarms.onAlarm.addListener(a=>{
+  if(a.name==="active-chat-sync")void reconcileAll();
+});
+chrome.runtime.onStartup.addListener(()=>chrome.alarms.create(
+  "active-chat-sync",{periodInMinutes:0.5}));
 chrome.tabs.onRemoved.addListener(tabId => { void deactivate(tabId); });
 chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
   if (change.url && !parseChat(change.url)) void deactivate(tabId);
@@ -100,6 +128,7 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       await api("/v2/health");
       active[tab.id]=id;
       await chrome.storage.session.set({[ACTIVE]:active});
+      void reconcileTab(tab.id,id);
       return {ok:true,active:true};
     }
     return {ok:false,error:"unknown_message"};
