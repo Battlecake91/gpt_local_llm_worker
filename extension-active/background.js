@@ -38,6 +38,26 @@ function parseChat(url) {
     return match ? match[1] : null;
   } catch { return null; }
 }
+async function listChatTabs() {
+  // Query all normal browser windows. Popup and service worker contexts must
+  // never assume that "currentWindow" is the ChatGPT window.
+  const tabs = await chrome.tabs.query({});
+  return tabs.filter(t => t.id > 0 && parseChat(t.url || "") &&
+    (!t.incognito) && (t.windowId >= 0)).map(t => ({
+      tab_id: t.id, conversation_id: parseChat(t.url),
+      title: (t.title || "ChatGPT").slice(0, 120),
+      active: !!t.active, window_id: t.windowId
+    }));
+}
+async function selectedChatTab(tabId, conversationId) {
+  if (!Number.isSafeInteger(tabId) || tabId <= 0 ||
+      typeof conversationId !== "string" || !conversationId)
+    throw Error("invalid_tab_selection");
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || tab.incognito || parseChat(tab.url || "") !== conversationId)
+    throw Error("tab_closed_or_changed");
+  return tab;
+}
 async function deactivate(tabId) {
   const active=await enabled();
   if (!active[tabId]) return;
@@ -101,13 +121,13 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       return {ok:false,error:"popup_only"};
     if (msg.type==="ACTIVE_GET") {
       const active=await enabled();
-      const tab=await chrome.tabs.query({active:true,currentWindow:true});
-      const current=tab[0];
-      let connected=false;
-      try { await api("/v2/health"); connected=true; } catch {}
-      return {ok:true,connected,tab_id:current?.id||null,
-        conversation_id:parseChat(current?.url||""),active:!!(current && active[current.id]===parseChat(current.url)),
-        count:Object.keys(active).length,tokenSaved:!!(await getToken())};
+      const tabs=await listChatTabs();
+      let connected=false, connectionError=null;
+      try { await api("/v2/health"); connected=true; }
+      catch(e) { connectionError=String(e.message||e); }
+      return {ok:true, connected, connectionError, tokenSaved:!!(await getToken()),
+        tabs:tabs.map(t=>({...t,enabled:active[t.tab_id]===t.conversation_id})),
+        count:Object.keys(active).length};
     }
     if (msg.type==="ACTIVE_SET_TOKEN") {
       if (typeof msg.token!=="string" || msg.token.length<32 || msg.token.length>256)
@@ -116,19 +136,17 @@ chrome.runtime.onMessage.addListener((msg,sender,reply)=>{
       return {ok:true};
     }
     if (msg.type==="ACTIVE_TOGGLE") {
-      const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
-      const id=parseChat(tab?.url||"");
-      if (!id || !tab?.id) return {ok:false,error:"no_chat"};
+      const tab=await selectedChatTab(msg.tab_id,msg.conversation_id);
       const active=await enabled();
-      if (active[tab.id]===id) {
+      if (active[tab.id]===msg.conversation_id) {
         await deactivate(tab.id);
         return {ok:true,active:false};
       }
-      // Never enable monitoring without an authenticated local worker.
+      // Activation is always explicit, scoped to the selected tab + chat ID.
       await api("/v2/health");
-      active[tab.id]=id;
+      active[tab.id]=msg.conversation_id;
       await chrome.storage.session.set({[ACTIVE]:active});
-      void reconcileTab(tab.id,id);
+      void reconcileTab(tab.id,msg.conversation_id);
       return {ok:true,active:true};
     }
     return {ok:false,error:"unknown_message"};
