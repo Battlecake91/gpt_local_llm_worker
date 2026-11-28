@@ -94,6 +94,12 @@
     attributes:true, attributeFilter:["data-message-author-role","data-content-search-unit-key",
       "aria-label","data-testid","class","hidden","style"]
   });
+  chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+    if (msg.type === "ACTIVE_REQUEST_SNAPSHOT") {
+      reply({snapshot:snapshot()});
+      return;
+    }
+  });
   window.addEventListener("popstate",queueSync);
   window.addEventListener("hashchange",queueSync);
   // Periodic snapshot also works if the DOM mutates before the extension starts.
