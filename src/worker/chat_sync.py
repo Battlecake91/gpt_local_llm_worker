@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 MAX_MESSAGES = 500
@@ -127,7 +128,7 @@ def create_app(store: ChatStore, token: str, extension_id: str) -> FastAPI:
     async def require_browser_origin(request, call_next):
         # Browsers supply Origin for extension fetches. Reject web pages.
         if request.headers.get("origin") != origin:
-            raise HTTPException(status_code=403, detail="invalid_origin")
+            return JSONResponse({"detail": "invalid_origin"}, status_code=403)
         return await call_next(request)
 
     def authenticate(authorization: str | None):
